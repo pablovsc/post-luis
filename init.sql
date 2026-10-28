@@ -1,0 +1,144 @@
+-- Script de inicialización automática de la base de datos
+-- Se ejecuta al crear el contenedor de PostgreSQL
+
+-- 1. Tabla de Impuestos (m_impuesto)
+CREATE TABLE IF NOT EXISTS m_impuesto (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    porcentaje NUMERIC(5, 2) NOT NULL CHECK (porcentaje >= 0),
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tabla de Clientes y Proveedores (m_tercero)
+CREATE TABLE IF NOT EXISTS m_tercero (
+    id SERIAL PRIMARY KEY,
+    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('CLIENTE', 'PROVEEDOR', 'AMBOS')),
+    identificacion VARCHAR(50) NOT NULL UNIQUE,
+    razon_social_nombre VARCHAR(255) NOT NULL,
+    direccion TEXT,
+    telefono VARCHAR(50),
+    email VARCHAR(255),
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Tabla de Productos (m_producto)
+CREATE TABLE IF NOT EXISTS m_producto (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    precio_usd NUMERIC(12, 2) NOT NULL CHECK (precio_usd >= 0),
+    stock_actual NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    costo_promedio_usd NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    impuesto_id INT REFERENCES m_impuesto(id),
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Tabla de Tasa de Cambio (m_tasa)
+CREATE TABLE IF NOT EXISTS m_tasa (
+    id SERIAL PRIMARY KEY,
+    fecha DATE NOT NULL UNIQUE,
+    tasa NUMERIC(14, 4) NOT NULL CHECK (tasa > 0),
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Tabla de Pedidos de Ventas (t_pedido)
+CREATE TABLE IF NOT EXISTS t_pedido (
+    id SERIAL PRIMARY KEY,
+    fecha_hora TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    tercero_id INT REFERENCES m_tercero(id),
+    cliente_nombre VARCHAR(255),
+    tasa_cambio_aplicada NUMERIC(14, 4) NOT NULL,
+    base_imponible_usd NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (base_imponible_usd >= 0),
+    monto_impuesto_usd NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (monto_impuesto_usd >= 0),
+    total_usd NUMERIC(14, 2) NOT NULL CHECK (total_usd >= 0),
+    total_moneda_local NUMERIC(16, 2) NOT NULL CHECK (total_moneda_local >= 0),
+    estado VARCHAR(20) NOT NULL DEFAULT 'COMPLETADO' CHECK (estado IN ('COMPLETADO', 'ANULADO'))
+);
+
+-- 6. Tabla de Líneas de Pedido (t_pedidolinea)
+CREATE TABLE IF NOT EXISTS t_pedidolinea (
+    id SERIAL PRIMARY KEY,
+    pedido_id INT NOT NULL REFERENCES t_pedido(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES m_producto(id),
+    cantidad NUMERIC(12, 2) NOT NULL CHECK (cantidad > 0),
+    precio_unitario_usd NUMERIC(12, 2) NOT NULL CHECK (precio_unitario_usd >= 0),
+    impuesto_id INT REFERENCES m_impuesto(id),
+    porcentaje_impuesto NUMERIC(5, 2) NOT NULL DEFAULT 0,
+    monto_impuesto_usd NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    subtotal_usd NUMERIC(14, 2) NOT NULL CHECK (subtotal_usd >= 0)
+);
+
+-- 7. Tabla de Factura de Compra (t_compra)
+CREATE TABLE IF NOT EXISTS t_compra (
+    id SERIAL PRIMARY KEY,
+    numero_factura VARCHAR(100) NOT NULL,
+    tercero_id INT NOT NULL REFERENCES m_tercero(id),
+    fecha_emision DATE NOT NULL,
+    tasa_cambio_aplicada NUMERIC(14, 4) NOT NULL CHECK (tasa_cambio_aplicada > 0),
+    base_imponible_usd NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (base_imponible_usd >= 0),
+    monto_impuesto_usd NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (monto_impuesto_usd >= 0),
+    total_usd NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (total_usd >= 0),
+    total_moneda_local NUMERIC(16, 2) NOT NULL DEFAULT 0 CHECK (total_moneda_local >= 0),
+    observaciones TEXT,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Tabla de Líneas de Factura de Compra (t_compralinea)
+CREATE TABLE IF NOT EXISTS t_compralinea (
+    id SERIAL PRIMARY KEY,
+    compra_id INT NOT NULL REFERENCES t_compra(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES m_producto(id),
+    cantidad NUMERIC(12, 2) NOT NULL CHECK (cantidad > 0),
+    costo_unitario_usd NUMERIC(12, 2) NOT NULL CHECK (costo_unitario_usd >= 0),
+    impuesto_id INT NOT NULL REFERENCES m_impuesto(id),
+    porcentaje_impuesto NUMERIC(5, 2) NOT NULL DEFAULT 0,
+    monto_impuesto_usd NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    subtotal_usd NUMERIC(14, 2) NOT NULL CHECK (subtotal_usd >= 0)
+);
+
+-- Índices recomendados
+CREATE INDEX IF NOT EXISTS idx_producto_activo ON m_producto(activo);
+CREATE INDEX IF NOT EXISTS idx_producto_impuesto ON m_producto(impuesto_id);
+CREATE INDEX IF NOT EXISTS idx_tasa_fecha ON m_tasa(fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_pedido_fecha ON t_pedido(fecha_hora DESC);
+CREATE INDEX IF NOT EXISTS idx_pedido_tercero ON t_pedido(tercero_id);
+CREATE INDEX IF NOT EXISTS idx_pedidolinea_pedido ON t_pedidolinea(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_tercero_tipo ON m_tercero(tipo);
+CREATE INDEX IF NOT EXISTS idx_tercero_identificacion ON m_tercero(identificacion);
+CREATE INDEX IF NOT EXISTS idx_compra_fecha ON t_compra(fecha_emision DESC);
+CREATE INDEX IF NOT EXISTS idx_compra_tercero ON t_compra(tercero_id);
+CREATE INDEX IF NOT EXISTS idx_compralinea_compra ON t_compralinea(compra_id);
+CREATE INDEX IF NOT EXISTS idx_compralinea_producto ON t_compralinea(producto_id);
+
+-- Registros por defecto de Impuestos
+INSERT INTO m_impuesto (id, nombre, porcentaje, activo) VALUES
+(1, 'IVA 16%', 16.00, true),
+(2, 'Exento (0%)', 0.00, true)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('m_impuesto_id_seq', COALESCE((SELECT MAX(id) FROM m_impuesto), 1));
+
+-- Registros por defecto de Terceros
+INSERT INTO m_tercero (id, tipo, identificacion, razon_social_nombre, direccion, telefono, email, activo) VALUES
+(1, 'CLIENTE', 'V-00000000', 'Cliente Genérico / Venta Mostrador', 'Tienda Local', 'N/A', 'cliente@mostrador.com', true),
+(2, 'PROVEEDOR', 'J-00000000-1', 'Distribuidora Central (Proveedor Demo)', 'Zona Industrial', '0414-0000000', 'proveedor@demo.com', true)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('m_tercero_id_seq', COALESCE((SELECT MAX(id) FROM m_tercero), 2));
+
+-- Datos iniciales de demostración para productos
+INSERT INTO m_producto (nombre, precio_usd, stock_actual, costo_promedio_usd, impuesto_id, activo) VALUES
+('Café Molido Gourmet 500g', 5.50, 25.00, 3.80, 1, true),
+('Harina de Maíz Precocida 1kg', 1.20, 50.00, 0.85, 2, true),
+('Arroz Blanco Premium 1kg', 1.40, 40.00, 0.95, 2, true),
+('Aceite Vegetal 1L', 3.20, 30.00, 2.20, 1, true),
+('Azúcar Refinada 1kg', 1.50, 45.00, 1.05, 2, true),
+('Pasta Spaghetti 500g', 1.10, 60.00, 0.75, 2, true),
+('Leche Completa Polvo 900g', 8.50, 20.00, 6.00, 2, true),
+('Refresco Cola 2L', 2.00, 35.00, 1.30, 1, true)
+ON CONFLICT DO NOTHING;
+
+-- Tasa inicial del día
+INSERT INTO m_tasa (fecha, tasa)
+VALUES (CURRENT_DATE, 36.5000)
+ON CONFLICT (fecha) DO NOTHING;

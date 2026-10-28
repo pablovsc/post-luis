@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --color-bg-base: #f8fafc;
+    --color-text-base: #0f172a;
+  }
+
+  .dark {
+    --color-bg-base: #020617;
+    --color-text-base: #f8fafc;
+  }
+
+  body {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-base);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+}
+
+/* Ocultar barra de desplazamiento manteniendo el scroll horizontal táctil suave */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

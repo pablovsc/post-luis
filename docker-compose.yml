@@ -1,0 +1,118 @@
+services:
+  # 1. Base de Datos PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: pos_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-luis}
+      POSTGRES_USER: ${DB_USER:-adempiere}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-adempiere}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Este script se ejecuta automáticamente al crearse el contenedor por primera vez
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-adempiere} -d ${DB_DATABASE:-luis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Aplicación Web Next.js POS
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pos_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-luis}
+      DB_USER: ${DB_USER:-adempiere}
+      DB_PASSWORD: ${DB_PASSWORD:-adempiere}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 3. Servicio Autónomo de Scraping del BCV (Cada 1 hora)
+  bcv-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.bcv
+    container_name: pos_bcv_scraper
+    restart: always
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-luis}
+      DB_USER: ${DB_USER:-adempiere}
+      DB_PASSWORD: ${DB_PASSWORD:-adempiere}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 4. Servicio Automático de Respaldos de PostgreSQL
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: pos_postgres_backup
+    restart: always
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${DB_DATABASE:-luis}
+      POSTGRES_USER: ${DB_USER:-adempiere}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-adempiere}
+      TZ: America/Caracas
+      # Programación: Se ejecuta cada 4 horas (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
+      SCHEDULE: "0 */4 * * *"
+      # Realiza un respaldo inmediato al arrancar el contenedor para verificar funcionamiento
+      BACKUP_ON_START: "TRUE"
+      # Política de retención: guarda diarios de 7 días, semanales de 4 semanas, mensuales de 6 meses
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      # Montaje a la carpeta física local del proyecto
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 5. Servicio Automático de Respaldos en Formato Custom (.backup / pgAdmin / pg_restore)
+  postgres-backup-custom:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: pos_postgres_backup_custom
+    restart: always
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${DB_DATABASE:-luis}
+      POSTGRES_USER: ${DB_USER:-adempiere}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-adempiere}
+      TZ: America/Caracas
+      # Formato binario Custom (-Fc) de PostgreSQL con extensión .backup
+      POSTGRES_EXTRA_OPTS: "-Fc"
+      BACKUP_SUFFIX: ".backup"
+      # Programación: Se ejecuta cada 4 horas (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
+      SCHEDULE: "0 */4 * * *"
+      BACKUP_ON_START: "TRUE"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
+
+
