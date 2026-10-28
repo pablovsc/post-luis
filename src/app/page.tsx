@@ -133,7 +133,7 @@ export default function Home() {
         : 'bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white'
     }`}>
       {/* Top Navigation Bar */}
-      <header className={`sticky top-0 z-40 backdrop-blur-xl border-b transition-colors ${
+      <header className={`print:hidden sticky top-0 z-40 backdrop-blur-xl border-b transition-colors ${
         isDarkMode
           ? 'bg-slate-950/80 border-slate-800/80'
           : 'bg-white/90 border-slate-200/90 shadow-sm'

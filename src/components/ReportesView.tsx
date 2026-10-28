@@ -82,6 +82,9 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
   const [reportData, setReportData] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Selector de moneda para visualización, exportación e impresión de ventas: 'ambas' | 'usd' | 'bs'
+  const [salesCurrencyMode, setSalesCurrencyMode] = useState<'ambas' | 'usd' | 'bs'>('ambas');
+
   // Sub-tab for Rentabilidad: 'productos' | 'ventas'
   const [rentabilidadSubTab, setRentabilidadSubTab] = useState<'productos' | 'ventas'>('productos');
 
@@ -224,33 +227,92 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
       const wb = XLSX.utils.book_new();
 
       // Sheet 1: Detalle de Ventas
-      const headers = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF / Cédula', 'Productos Vendidos', 'Artículos', 'Tasa BCV', 'Base Imponible USD', 'IVA USD', 'Total USD', 'Total Bs.'];
+      let headers: string[] = [];
+      if (salesCurrencyMode === 'ambas') {
+        headers = [
+          'ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF / Cédula', 'Productos Vendidos', 'Artículos', 'Tasa BCV',
+          'Base Imponible USD', 'IVA USD', 'Total USD',
+          'Base Imponible Bs.', 'IVA Bs.', 'Total Bs.'
+        ];
+      } else if (salesCurrencyMode === 'usd') {
+        headers = [
+          'ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF / Cédula', 'Productos Vendidos', 'Artículos', 'Tasa BCV',
+          'Base Imponible USD', 'IVA USD', 'Total USD'
+        ];
+      } else {
+        headers = [
+          'ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF / Cédula', 'Productos Vendidos', 'Artículos', 'Tasa BCV',
+          'Base Imponible Bs.', 'IVA Bs.', 'Total Bs.'
+        ];
+      }
+
       const dataRows = reportData.ventas.pedidos.map((p: any) => {
         const prods = (p.lineas || []).map((l: any) => `${Number(l.cantidad)}x ${l.producto_nombre}${l.presentacion_nombre ? ` (${l.presentacion_nombre})` : ''}`).join('; ');
-        return [
+        const tasa = Number(p.tasa_cambio_aplicada);
+        const baseBs = p.base_imponible_bs !== undefined ? Number(p.base_imponible_bs) : Number((Number(p.base_imponible_usd) * tasa).toFixed(2));
+        const ivaBs = p.monto_impuesto_bs !== undefined ? Number(p.monto_impuesto_bs) : Number((Number(p.monto_impuesto_usd) * tasa).toFixed(2));
+
+        const baseRow = [
           p.id,
           new Date(p.fecha_hora).toLocaleString('es-VE'),
           p.cliente_nombre || 'Consumidor Final',
           p.cliente_identificacion || 'N/A',
           prods,
           p.total_articulos,
-          Number(p.tasa_cambio_aplicada),
-          Number(p.base_imponible_usd),
-          Number(p.monto_impuesto_usd),
-          Number(p.total_usd),
-          Number(p.total_moneda_local),
+          tasa,
         ];
+
+        if (salesCurrencyMode === 'ambas') {
+          return [
+            ...baseRow,
+            Number(p.base_imponible_usd),
+            Number(p.monto_impuesto_usd),
+            Number(p.total_usd),
+            baseBs,
+            ivaBs,
+            Number(p.total_moneda_local),
+          ];
+        } else if (salesCurrencyMode === 'usd') {
+          return [
+            ...baseRow,
+            Number(p.base_imponible_usd),
+            Number(p.monto_impuesto_usd),
+            Number(p.total_usd),
+          ];
+        } else {
+          return [
+            ...baseRow,
+            baseBs,
+            ivaBs,
+            Number(p.total_moneda_local),
+          ];
+        }
       });
       const wsVentas = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       XLSX.utils.book_append_sheet(wb, wsVentas, 'Ventas');
 
       // Sheet 2: Detalle de Productos Vendidos (Línea por Línea)
-      const itemHeaders = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'ID Producto', 'Producto', 'Presentación / Medida', 'Cantidad', 'Precio Unitario USD', 'IVA %', 'Monto IVA USD', 'Subtotal USD', 'Total USD', 'Total Bs.'];
+      let itemHeaders: string[] = [];
+      if (salesCurrencyMode === 'ambas') {
+        itemHeaders = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'ID Producto', 'Producto', 'Presentación / Medida', 'Cantidad', 'Precio Unitario USD', 'IVA %', 'Monto IVA USD', 'Subtotal USD', 'Total USD', 'Base Bs.', 'IVA Bs.', 'Total Bs.'];
+      } else if (salesCurrencyMode === 'usd') {
+        itemHeaders = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'ID Producto', 'Producto', 'Presentación / Medida', 'Cantidad', 'Precio Unitario USD', 'IVA %', 'Monto IVA USD', 'Subtotal USD', 'Total USD'];
+      } else {
+        itemHeaders = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'ID Producto', 'Producto', 'Presentación / Medida', 'Cantidad', 'Precio Unitario Bs.', 'IVA %', 'Base Bs.', 'IVA Bs.', 'Total Bs.'];
+      }
+
       const itemRows: any[] = [];
       reportData.ventas.pedidos.forEach((p: any) => {
+        const tasa = Number(p.tasa_cambio_aplicada);
         (p.lineas || []).forEach((l: any) => {
-          const lineTotal = Number(l.subtotal_usd) + Number(l.monto_impuesto_usd);
-          itemRows.push([
+          const subtotalUsd = Number(l.subtotal_usd);
+          const ivaUsd = Number(l.monto_impuesto_usd);
+          const lineTotalUsd = subtotalUsd + ivaUsd;
+          const subtotalBs = Number((subtotalUsd * tasa).toFixed(2));
+          const ivaBs = Number((ivaUsd * tasa).toFixed(2));
+          const lineTotalBs = Number((lineTotalUsd * tasa).toFixed(2));
+
+          const baseItem = [
             p.id,
             new Date(p.fecha_hora).toLocaleString('es-VE'),
             p.cliente_nombre || 'Consumidor Final',
@@ -258,13 +320,39 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
             l.producto_nombre,
             l.presentacion_nombre || l.unidad_base || 'Unidad',
             Number(l.cantidad),
-            Number(l.precio_unitario_usd),
-            Number(l.porcentaje_impuesto),
-            Number(l.monto_impuesto_usd),
-            Number(l.subtotal_usd),
-            Number(lineTotal.toFixed(2)),
-            Number((lineTotal * Number(p.tasa_cambio_aplicada)).toFixed(2)),
-          ]);
+          ];
+
+          if (salesCurrencyMode === 'ambas') {
+            itemRows.push([
+              ...baseItem,
+              Number(l.precio_unitario_usd),
+              Number(l.porcentaje_impuesto),
+              ivaUsd,
+              subtotalUsd,
+              Number(lineTotalUsd.toFixed(2)),
+              subtotalBs,
+              ivaBs,
+              lineTotalBs,
+            ]);
+          } else if (salesCurrencyMode === 'usd') {
+            itemRows.push([
+              ...baseItem,
+              Number(l.precio_unitario_usd),
+              Number(l.porcentaje_impuesto),
+              ivaUsd,
+              subtotalUsd,
+              Number(lineTotalUsd.toFixed(2)),
+            ]);
+          } else {
+            itemRows.push([
+              ...baseItem,
+              Number((Number(l.precio_unitario_usd) * tasa).toFixed(2)),
+              Number(l.porcentaje_impuesto),
+              subtotalBs,
+              ivaBs,
+              lineTotalBs,
+            ]);
+          }
         });
       });
       const wsItems = XLSX.utils.aoa_to_sheet([itemHeaders, ...itemRows]);
@@ -275,13 +363,16 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
       if (res) {
         const resumenHeaders = ['Métrica', 'Valor'];
         const resumenRows = [
+          ['Modo de Moneda', salesCurrencyMode === 'ambas' ? 'Ambas Monedas (USD y Bs.)' : salesCurrencyMode === 'usd' ? 'Solo Dólares (USD)' : 'Solo Bolívares (Bs.)'],
           ['Total Ventas USD', res.totalVentasUsd],
           ['Total Ventas Bs.', res.totalVentasLocal],
           ['Base Imponible USD', res.totalBaseUsd],
+          ['Base Imponible Bs.', res.totalBaseLocal || Number((res.totalBaseUsd * appliedRate).toFixed(2))],
           ['IVA Total USD', res.totalIvaUsd],
+          ['IVA Total Bs.', res.totalIvaLocal || Number((res.totalIvaUsd * appliedRate).toFixed(2))],
           ['Cantidad de Pedidos', res.totalPedidos],
           ['Ticket Promedio USD', res.ticketPromedioUsd],
-          ['Tasa BCV Promedio', res.tasaPromedio],
+          ['Tasa BCV Promedio', res.tasaPromedio || appliedRate],
           ['Período Desde', fechaDesde],
           ['Período Hasta', fechaHasta],
         ];
@@ -289,7 +380,7 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
         XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
       }
 
-      XLSX.writeFile(wb, `reporte_ventas_${fechaDesde}_al_${fechaHasta}.xlsx`);
+      XLSX.writeFile(wb, `reporte_ventas_${salesCurrencyMode}_${fechaDesde}_al_${fechaHasta}.xlsx`);
     } else if (activeTab === 'rentabilidad') {
       if (!reportData?.rentabilidadFifo?.porProducto) return;
       const wb = XLSX.utils.book_new();
@@ -463,10 +554,23 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
   const handleExportCsv = () => {
     if (activeTab === 'ventas') {
       if (!reportData?.ventas?.pedidos) return;
-      const headers = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF', 'Productos Vendidos', 'Articulos', 'Tasa', 'Base USD', 'IVA USD', 'Total USD', 'Total Bs'];
+
+      let headers: string[] = [];
+      if (salesCurrencyMode === 'ambas') {
+        headers = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF', 'Productos Vendidos', 'Articulos', 'Tasa', 'Base USD', 'IVA USD', 'Total USD', 'Base Bs', 'IVA Bs', 'Total Bs'];
+      } else if (salesCurrencyMode === 'usd') {
+        headers = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF', 'Productos Vendidos', 'Articulos', 'Tasa', 'Base USD', 'IVA USD', 'Total USD'];
+      } else {
+        headers = ['ID Pedido', 'Fecha y Hora', 'Cliente', 'RIF', 'Productos Vendidos', 'Articulos', 'Tasa', 'Base Bs', 'IVA Bs', 'Total Bs'];
+      }
+
       const rows = reportData.ventas.pedidos.map((p: any) => {
         const prods = (p.lineas || []).map((l: any) => `${Number(l.cantidad)}x ${l.producto_nombre}${l.presentacion_nombre ? ` (${l.presentacion_nombre})` : ''}`).join('; ');
-        return [
+        const tasa = Number(p.tasa_cambio_aplicada);
+        const baseBs = p.base_imponible_bs !== undefined ? Number(p.base_imponible_bs) : Number((Number(p.base_imponible_usd) * tasa).toFixed(2));
+        const ivaBs = p.monto_impuesto_bs !== undefined ? Number(p.monto_impuesto_bs) : Number((Number(p.monto_impuesto_usd) * tasa).toFixed(2));
+
+        const baseRow = [
           p.id,
           new Date(p.fecha_hora).toLocaleString('es-VE'),
           `"${p.cliente_nombre || ''}"`,
@@ -474,17 +578,39 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
           `"${prods}"`,
           p.total_articulos,
           p.tasa_cambio_aplicada,
-          p.base_imponible_usd,
-          p.monto_impuesto_usd,
-          p.total_usd,
-          p.total_moneda_local,
         ];
+
+        if (salesCurrencyMode === 'ambas') {
+          return [
+            ...baseRow,
+            p.base_imponible_usd,
+            p.monto_impuesto_usd,
+            p.total_usd,
+            baseBs,
+            ivaBs,
+            p.total_moneda_local,
+          ];
+        } else if (salesCurrencyMode === 'usd') {
+          return [
+            ...baseRow,
+            p.base_imponible_usd,
+            p.monto_impuesto_usd,
+            p.total_usd,
+          ];
+        } else {
+          return [
+            ...baseRow,
+            baseBs,
+            ivaBs,
+            p.total_moneda_local,
+          ];
+        }
       });
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e: any[]) => e.join(','))].join('\n');
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `reporte_ventas_${fechaDesde}_al_${fechaHasta}.csv`);
+      link.setAttribute('download', `reporte_ventas_${salesCurrencyMode}_${fechaDesde}_al_${fechaHasta}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -571,7 +697,9 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
     totalVentasUsd: 0,
     totalVentasLocal: 0,
     totalBaseUsd: 0,
+    totalBaseLocal: 0,
     totalIvaUsd: 0,
+    totalIvaLocal: 0,
     cantidadPedidos: 0,
     ticketPromedioUsd: 0,
     totalUnidadesVendidas: 0,
@@ -599,7 +727,7 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
   return (
     <div className="space-y-6">
       {/* Header with Title & Main Tabs */}
-      <div className={`p-6 rounded-3xl border transition-all ${
+      <div className={`print:hidden p-6 rounded-3xl border transition-all ${
         isDarkMode
           ? 'bg-slate-900/60 border-slate-800 shadow-xl'
           : 'bg-white border-slate-200 shadow-sm'
@@ -668,7 +796,7 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
       </div>
 
       {/* Date Range Selector & Actions Bar */}
-      <div className={`p-4 rounded-2xl border flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 transition-colors ${
+      <div className={`print:hidden p-4 rounded-2xl border flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 transition-colors ${
         isDarkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
       }`}>
         {/* Quick Date Presets */}
@@ -820,8 +948,9 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
                 {salesSummary.totalVentasLocal.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 <span className="text-xs font-normal text-slate-400 ml-1">Bs.</span>
               </div>
-              <div className="text-xs text-slate-400">
-                Calculado con tasa aplicada de cada venta
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Base: {(salesSummary.totalBaseLocal || Number((salesSummary.totalBaseUsd * appliedRate).toFixed(2))).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.</span>
+                <span className="text-amber-500 font-semibold">+IVA: {(salesSummary.totalIvaLocal || Number((salesSummary.totalIvaUsd * appliedRate).toFixed(2))).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.</span>
               </div>
             </div>
 
@@ -862,20 +991,94 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
             </div>
           </div>
 
-          {/* Search bar inside Sales Table */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Filtrar por ID, cliente o RIF..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full pl-9 pr-3.5 py-2 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
-                  isDarkMode ? 'bg-slate-900 border-slate-800 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
-                }`}
-              />
+          {/* Encabezado visible únicamente al imprimir */}
+          <div className="hidden print:block mb-4 p-4 border border-slate-300 rounded-2xl bg-white text-slate-900">
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-black uppercase tracking-tight">Reporte de Ventas</h2>
+                <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                  Visualización de Moneda:{' '}
+                  <span className="font-bold text-indigo-700">
+                    {salesCurrencyMode === 'ambas'
+                      ? 'Ambas Monedas (USD y Bs.)'
+                      : salesCurrencyMode === 'usd'
+                      ? 'Solo Dólares (USD)'
+                      : 'Solo Bolívares (Bs.)'}
+                  </span>
+                </p>
+                <p className="text-xs text-slate-600 font-mono">
+                  Período: {fechaDesde} al {fechaHasta}
+                </p>
+              </div>
+              <div className="text-right text-xs text-slate-500 font-mono">
+                <p>Fecha de Impresión: {new Date().toLocaleString('es-VE')}</p>
+                <p>Total Pedidos: {salesSummary.cantidadPedidos}</p>
+              </div>
             </div>
+          </div>
+
+          {/* Search bar & Currency Selector inside Sales Table */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 print:hidden">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filtrar por ID, cliente o RIF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full pl-9 pr-3.5 py-2 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800 text-white placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+
+              {/* Selector de Moneda (Ambas / USD / Bs.) */}
+              <div className={`flex items-center gap-1 p-1 rounded-xl border transition-colors ${
+                isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100/90 border-slate-200'
+              }`}>
+                <span className="text-[11px] font-bold text-slate-400 px-2 flex items-center gap-1">
+                  <DollarSign className="w-3.5 h-3.5 text-indigo-500" /> Moneda:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSalesCurrencyMode('ambas')}
+                  title="Ver, descargar e imprimir en ambas monedas (USD y Bs.)"
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                    salesCurrencyMode === 'ambas'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Ambas (USD + Bs.)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSalesCurrencyMode('usd')}
+                  title="Ver, descargar e imprimir solo en Dólares (USD)"
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                    salesCurrencyMode === 'usd'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Solo USD ($)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSalesCurrencyMode('bs')}
+                  title="Ver, descargar e imprimir solo en Bolívares (Bs.)"
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                    salesCurrencyMode === 'bs'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : isDarkMode ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Solo Bs.
+                </button>
+              </div>
+            </div>
+
             <div className="text-xs text-slate-400 font-mono">
               Mostrando {filteredSales.length} de {salesSummary.cantidadPedidos} ventas en el período
             </div>
@@ -896,11 +1099,25 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
                     <th className="py-3.5 px-4">Cliente</th>
                     <th className="py-3.5 px-4">Productos Vendidos</th>
                     <th className="py-3.5 px-3 text-center">Arts.</th>
-                    <th className="py-3.5 px-3 text-right">Tasa Aplicada</th>
-                    <th className="py-3.5 px-3 text-right">Base USD</th>
-                    <th className="py-3.5 px-3 text-right">IVA USD</th>
-                    <th className="py-3.5 px-4 text-right">Total USD</th>
-                    <th className="py-3.5 px-4 text-right">Total Bs.</th>
+                    <th className="py-3.5 px-3 text-right">Tasa BCV</th>
+
+                    {/* Columnas en USD */}
+                    {(salesCurrencyMode === 'ambas' || salesCurrencyMode === 'usd') && (
+                      <>
+                        <th className="py-3.5 px-3 text-right text-slate-700 dark:text-slate-300">Base Imponible USD</th>
+                        <th className="py-3.5 px-3 text-right text-amber-600 dark:text-amber-400">IVA USD</th>
+                        <th className="py-3.5 px-4 text-right text-emerald-600 dark:text-emerald-400">Total USD</th>
+                      </>
+                    )}
+
+                    {/* Columnas en Bolívares (Bs.) */}
+                    {(salesCurrencyMode === 'ambas' || salesCurrencyMode === 'bs') && (
+                      <>
+                        <th className="py-3.5 px-3 text-right text-slate-700 dark:text-slate-300">Base Imponible Bs.</th>
+                        <th className="py-3.5 px-3 text-right text-amber-600 dark:text-amber-400">IVA Bs.</th>
+                        <th className="py-3.5 px-4 text-right text-indigo-600 dark:text-indigo-400">Total Bs.</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className={`divide-y transition-colors ${
@@ -908,14 +1125,14 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
                 }`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-slate-400">
+                      <td colSpan={salesCurrencyMode === 'ambas' ? 12 : 9} className="py-12 text-center text-slate-400">
                         <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-indigo-500 opacity-60" />
                         Cargando reporte de ventas...
                       </td>
                     </tr>
                   ) : filteredSales.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-slate-400">
+                      <td colSpan={salesCurrencyMode === 'ambas' ? 12 : 9} className="py-12 text-center text-slate-400">
                         <Receipt className="w-10 h-10 mx-auto mb-2 opacity-30" />
                         No se encontraron ventas completadas en el rango seleccionado ({fechaDesde} a {fechaHasta}).
                       </td>
@@ -995,25 +1212,50 @@ export default function ReportesView({ currentRate, initialTab = 'ventas', isDar
                             <td className="py-3 px-3 text-right font-mono text-xs text-slate-500">
                               {Number(p.tasa_cambio_aplicada).toFixed(4)}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono text-xs text-slate-600 dark:text-slate-300">
-                              ${Number(p.base_imponible_usd).toFixed(2)}
-                            </td>
-                            <td className="py-3 px-3 text-right font-mono text-xs text-amber-600 dark:text-amber-400">
-                              ${Number(p.monto_impuesto_usd).toFixed(2)}
-                            </td>
-                            <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                              ${Number(p.total_usd).toFixed(2)}
-                            </td>
-                            <td className="py-3 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              {Number(p.total_moneda_local).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                              <span className="text-[10px] font-normal text-slate-400">Bs.</span>
-                            </td>
+                            {/* Columnas en USD */}
+                            {(salesCurrencyMode === 'ambas' || salesCurrencyMode === 'usd') && (
+                              <>
+                                <td className="py-3 px-3 text-right font-mono text-xs text-slate-600 dark:text-slate-300">
+                                  ${Number(p.base_imponible_usd).toFixed(2)}
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono text-xs text-amber-600 dark:text-amber-400">
+                                  ${Number(p.monto_impuesto_usd).toFixed(2)}
+                                </td>
+                                <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  ${Number(p.total_usd).toFixed(2)}
+                                </td>
+                              </>
+                            )}
+
+                            {/* Columnas en Bolívares (Bs.) */}
+                            {(salesCurrencyMode === 'ambas' || salesCurrencyMode === 'bs') && (
+                              <>
+                                <td className="py-3 px-3 text-right font-mono text-xs text-slate-600 dark:text-slate-300">
+                                  {(p.base_imponible_bs !== undefined
+                                    ? Number(p.base_imponible_bs)
+                                    : Number(p.base_imponible_usd) * Number(p.tasa_cambio_aplicada)
+                                  ).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                  <span className="text-[10px] font-normal text-slate-400">Bs.</span>
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono text-xs text-amber-600 dark:text-amber-400">
+                                  {(p.monto_impuesto_bs !== undefined
+                                    ? Number(p.monto_impuesto_bs)
+                                    : Number(p.monto_impuesto_usd) * Number(p.tasa_cambio_aplicada)
+                                  ).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                  <span className="text-[10px] font-normal text-slate-400">Bs.</span>
+                                </td>
+                                <td className="py-3 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  {Number(p.total_moneda_local).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                  <span className="text-[10px] font-normal text-slate-400">Bs.</span>
+                                </td>
+                              </>
+                            )}
                           </tr>
 
                           {/* Fila expandible con el desglose del ticket */}
                           {isSaleExpanded && hasLineas && (
                             <tr className="bg-slate-50/90 dark:bg-slate-900/60 border-b-2 border-indigo-500/30">
-                              <td colSpan={10} className="p-4 sm:p-5">
+                              <td colSpan={salesCurrencyMode === 'ambas' ? 12 : 9} className="p-4 sm:p-5">
                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
                                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700">
                                     <div className="flex items-center gap-2">

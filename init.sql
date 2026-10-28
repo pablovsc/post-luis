@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS t_compra (
     total_usd NUMERIC(14, 2) NOT NULL CHECK (total_usd >= 0),
     total_moneda_local NUMERIC(16, 2) NOT NULL DEFAULT 0 CHECK (total_moneda_local >= 0),
     observaciones TEXT,
+    estado VARCHAR(20) NOT NULL DEFAULT 'COMPLETADO' CHECK (estado IN ('PROCESO', 'COMPLETADO', 'ANULADO')),
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

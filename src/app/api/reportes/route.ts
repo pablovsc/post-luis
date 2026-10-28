@@ -69,11 +69,22 @@ export async function GET(req: Request) {
 
     const salesRows = await query(salesReportQuery, [startIso, endIso]);
 
+    // Calcular base e IVA en Bolívares para cada pedido
+    salesRows.forEach((row: any) => {
+      const tasa = Number(row.tasa_cambio_aplicada) || 1;
+      const baseUsd = Number(row.base_imponible_usd) || 0;
+      const ivaUsd = Number(row.monto_impuesto_usd) || 0;
+      row.base_imponible_bs = Number((baseUsd * tasa).toFixed(2));
+      row.monto_impuesto_bs = Number((ivaUsd * tasa).toFixed(2));
+    });
+
     // Resumen de Ventas
     const totalVentasUsd = salesRows.reduce((acc, row) => acc + Number(row.total_usd || 0), 0);
     const totalVentasLocal = salesRows.reduce((acc, row) => acc + Number(row.total_moneda_local || 0), 0);
     const totalBaseUsd = salesRows.reduce((acc, row) => acc + Number(row.base_imponible_usd || 0), 0);
     const totalIvaUsd = salesRows.reduce((acc, row) => acc + Number(row.monto_impuesto_usd || 0), 0);
+    const totalBaseLocal = salesRows.reduce((acc, row) => acc + Number(row.base_imponible_bs || 0), 0);
+    const totalIvaLocal = salesRows.reduce((acc, row) => acc + Number(row.monto_impuesto_bs || 0), 0);
     const cantidadPedidos = salesRows.length;
     const ticketPromedioUsd = cantidadPedidos > 0 ? totalVentasUsd / cantidadPedidos : 0;
     const totalUnidadesVendidas = salesRows.reduce((acc, row) => acc + Number(row.total_unidades || 0), 0);
@@ -114,21 +125,43 @@ export async function GET(req: Request) {
     allProducts.forEach((p) => productMap.set(p.id, p));
 
     // B) Todos los lotes de compra completados en orden histórico (convertidos a unidad base)
-    const purchaseBatches = await query(`
-      SELECT 
-        cl.id as linea_id,
-        c.id as compra_id,
-        c.numero_factura,
-        c.fecha_emision,
-        c.creado_en,
-        cl.producto_id,
-        COALESCE(cl.cantidad_base, cl.cantidad)::numeric as cantidad,
-        (cl.costo_unitario_usd / COALESCE(cl.factor_conversion, 1))::numeric as costo_unitario_usd
-      FROM t_compra c
-      JOIN t_compralinea cl ON cl.compra_id = c.id
-      WHERE c.estado = 'COMPLETADO'
-      ORDER BY c.fecha_emision ASC, c.id ASC, cl.id ASC
-    `);
+    let purchaseBatches: any[] = [];
+    try {
+      purchaseBatches = await query(`
+        SELECT 
+          cl.id as linea_id,
+          c.id as compra_id,
+          c.numero_factura,
+          c.fecha_emision,
+          c.creado_en,
+          cl.producto_id,
+          COALESCE(cl.cantidad_base, cl.cantidad)::numeric as cantidad,
+          (cl.costo_unitario_usd / COALESCE(cl.factor_conversion, 1))::numeric as costo_unitario_usd
+        FROM t_compra c
+        JOIN t_compralinea cl ON cl.compra_id = c.id
+        WHERE COALESCE(c.estado, 'COMPLETADO') != 'ANULADO'
+        ORDER BY c.fecha_emision ASC, c.id ASC, cl.id ASC
+      `);
+    } catch {
+      try {
+        purchaseBatches = await query(`
+          SELECT 
+            cl.id as linea_id,
+            c.id as compra_id,
+            c.numero_factura,
+            c.fecha_emision,
+            c.creado_en,
+            cl.producto_id,
+            COALESCE(cl.cantidad_base, cl.cantidad)::numeric as cantidad,
+            (cl.costo_unitario_usd / COALESCE(cl.factor_conversion, 1))::numeric as costo_unitario_usd
+          FROM t_compra c
+          JOIN t_compralinea cl ON cl.compra_id = c.id
+          ORDER BY c.fecha_emision ASC, c.id ASC, cl.id ASC
+        `);
+      } catch (err) {
+        console.error('Error al consultar lotes de compras FIFO:', err);
+      }
+    }
 
     // Estructura de inventario FIFO disponible por producto
     const fifoInventory = new Map<number, {
@@ -431,7 +464,9 @@ export async function GET(req: Request) {
           totalVentasUsd: Number(totalVentasUsd.toFixed(2)),
           totalVentasLocal: Number(totalVentasLocal.toFixed(2)),
           totalBaseUsd: Number(totalBaseUsd.toFixed(2)),
+          totalBaseLocal: Number(totalBaseLocal.toFixed(2)),
           totalIvaUsd: Number(totalIvaUsd.toFixed(2)),
+          totalIvaLocal: Number(totalIvaLocal.toFixed(2)),
           cantidadPedidos,
           ticketPromedioUsd: Number(ticketPromedioUsd.toFixed(2)),
           totalUnidadesVendidas,
