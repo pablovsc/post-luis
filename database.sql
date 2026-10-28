@@ -29,8 +29,20 @@ CREATE TABLE IF NOT EXISTS m_producto (
     nombre VARCHAR(255) NOT NULL,
     precio_usd NUMERIC(12, 2) NOT NULL CHECK (precio_usd >= 0),
     stock_actual NUMERIC(12, 2) NOT NULL DEFAULT 0,
-    costo_promedio_usd NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    costo_promedio_usd NUMERIC(14, 4) NOT NULL DEFAULT 0,
+    unidad_base VARCHAR(50) NOT NULL DEFAULT 'Unidad',
     impuesto_id INT REFERENCES m_impuesto(id),
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3.1 Tabla de Presentaciones por Producto (m_producto_presentacion)
+CREATE TABLE IF NOT EXISTS m_producto_presentacion (
+    id SERIAL PRIMARY KEY,
+    producto_id INT NOT NULL REFERENCES m_producto(id) ON DELETE CASCADE,
+    nombre VARCHAR(50) NOT NULL,
+    factor NUMERIC(12, 3) NOT NULL CHECK (factor > 0),
+    precio_usd NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (precio_usd >= 0),
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -62,7 +74,11 @@ CREATE TABLE IF NOT EXISTS t_pedidolinea (
     id SERIAL PRIMARY KEY,
     pedido_id INT NOT NULL REFERENCES t_pedido(id) ON DELETE CASCADE,
     producto_id INT NOT NULL REFERENCES m_producto(id),
+    presentacion_id INT REFERENCES m_producto_presentacion(id) ON DELETE SET NULL,
+    presentacion_nombre VARCHAR(50),
+    factor_conversion NUMERIC(12, 3) NOT NULL DEFAULT 1,
     cantidad NUMERIC(12, 2) NOT NULL CHECK (cantidad > 0),
+    cantidad_base NUMERIC(14, 3),
     precio_unitario_usd NUMERIC(12, 2) NOT NULL CHECK (precio_unitario_usd >= 0),
     impuesto_id INT REFERENCES m_impuesto(id),
     porcentaje_impuesto NUMERIC(5, 2) NOT NULL DEFAULT 0,
@@ -90,7 +106,11 @@ CREATE TABLE IF NOT EXISTS t_compralinea (
     id SERIAL PRIMARY KEY,
     compra_id INT NOT NULL REFERENCES t_compra(id) ON DELETE CASCADE,
     producto_id INT NOT NULL REFERENCES m_producto(id),
+    presentacion_id INT REFERENCES m_producto_presentacion(id) ON DELETE SET NULL,
+    presentacion_nombre VARCHAR(50),
+    factor_conversion NUMERIC(12, 3) NOT NULL DEFAULT 1,
     cantidad NUMERIC(12, 2) NOT NULL CHECK (cantidad > 0),
+    cantidad_base NUMERIC(14, 3),
     costo_unitario_usd NUMERIC(12, 2) NOT NULL CHECK (costo_unitario_usd >= 0),
     impuesto_id INT NOT NULL REFERENCES m_impuesto(id),
     porcentaje_impuesto NUMERIC(5, 2) NOT NULL DEFAULT 0,
@@ -101,6 +121,7 @@ CREATE TABLE IF NOT EXISTS t_compralinea (
 -- Índices recomendados para optimización de consultas y reportes
 CREATE INDEX IF NOT EXISTS idx_producto_activo ON m_producto(activo);
 CREATE INDEX IF NOT EXISTS idx_producto_impuesto ON m_producto(impuesto_id);
+CREATE INDEX IF NOT EXISTS idx_presentacion_producto ON m_producto_presentacion(producto_id);
 CREATE INDEX IF NOT EXISTS idx_tasa_fecha ON m_tasa(fecha DESC);
 CREATE INDEX IF NOT EXISTS idx_pedido_fecha ON t_pedido(fecha_hora DESC);
 CREATE INDEX IF NOT EXISTS idx_pedido_tercero ON t_pedido(tercero_id);
