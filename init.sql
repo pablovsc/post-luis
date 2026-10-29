@@ -148,19 +148,3 @@ INSERT INTO m_tercero (id, tipo, identificacion, razon_social_nombre, direccion,
 ON CONFLICT (id) DO NOTHING;
 SELECT setval('m_tercero_id_seq', COALESCE((SELECT MAX(id) FROM m_tercero), 2));
 
--- Datos iniciales de demostración para productos
-INSERT INTO m_producto (nombre, precio_usd, stock_actual, costo_promedio_usd, impuesto_id, activo) VALUES
-('Café Molido Gourmet 500g', 5.50, 25.00, 3.80, 1, true),
-('Harina de Maíz Precocida 1kg', 1.20, 50.00, 0.85, 2, true),
-('Arroz Blanco Premium 1kg', 1.40, 40.00, 0.95, 2, true),
-('Aceite Vegetal 1L', 3.20, 30.00, 2.20, 1, true),
-('Azúcar Refinada 1kg', 1.50, 45.00, 1.05, 2, true),
-('Pasta Spaghetti 500g', 1.10, 60.00, 0.75, 2, true),
-('Leche Completa Polvo 900g', 8.50, 20.00, 6.00, 2, true),
-('Refresco Cola 2L', 2.00, 35.00, 1.30, 1, true)
-ON CONFLICT DO NOTHING;
-
--- Tasa inicial del día
-INSERT INTO m_tasa (fecha, tasa)
-VALUES (CURRENT_DATE, 36.5000)
-ON CONFLICT (fecha) DO NOTHING;
