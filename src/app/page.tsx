@@ -17,6 +17,8 @@ import {
   Percent,
   LayoutGrid,
   QrCode,
+  BarChart3,
+  ShieldAlert,
 } from 'lucide-react';
 import MainMenuView from '@/components/MainMenuView';
 import DashboardView from '@/components/DashboardView';
@@ -30,6 +32,7 @@ import ImpuestosView from '@/components/ImpuestosView';
 import ReportesView from '@/components/ReportesView';
 import DatabaseModal from '@/components/DatabaseModal';
 import QrModal from '@/components/QrModal';
+import MantenimientoModal from '@/components/MantenimientoModal';
 import { Producto, Tasa, DashboardData } from '@/types';
 
 type ActiveTab = 'menu' | 'dashboard' | 'pos' | 'orders' | 'compras' | 'products' | 'terceros' | 'impuestos' | 'rates' | 'reports';
@@ -38,6 +41,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('menu');
   const [reportSubTab, setReportSubTab] = useState<'ventas' | 'rentabilidad' | 'inventario'>('ventas');
   const [showDbModal, setShowDbModal] = useState(false);
+  const [showMantenimientoModal, setShowMantenimientoModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [dbConnected, setDbConnected] = useState(true);
   
@@ -124,6 +128,7 @@ export default function Home() {
     { id: 'menu', label: 'Inicio', icon: LayoutGrid },
     { id: 'pos', label: 'Punto de Venta', icon: ShoppingCart },
     { id: 'compras', label: 'Compras', icon: Truck },
+    { id: 'reports', label: 'Reportes', icon: BarChart3 },
   ] as const;
 
   return (
@@ -294,6 +299,19 @@ export default function Home() {
                 {dbConnected ? 'BD Conectada' : 'Configurar BD'}
               </span>
             </button>
+
+            {/* Mantenimiento / Sistemas Button */}
+            <button
+              onClick={() => setShowMantenimientoModal(true)}
+              title="Herramienta de Mantenimiento de Base de Datos y Pruebas"
+              className={`p-2 rounded-xl border transition flex items-center justify-center ${
+                isDarkMode
+                  ? 'bg-rose-950/20 border-rose-900/40 text-rose-400 hover:bg-rose-900/40'
+                  : 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 shadow-sm'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -450,6 +468,14 @@ export default function Home() {
       <QrModal
         isOpen={showQrModal}
         onClose={() => setShowQrModal(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Modal de Mantenimiento / Sistemas */}
+      <MantenimientoModal
+        isOpen={showMantenimientoModal}
+        onClose={() => setShowMantenimientoModal(false)}
+        onCompleted={fetchData}
         isDarkMode={isDarkMode}
       />
     </div>

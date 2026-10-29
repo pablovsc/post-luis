@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Layers,
   Boxes,
+  X,
 } from 'lucide-react';
 
 export interface CartItem {
@@ -54,6 +55,8 @@ export default function PosView({
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<any | null>(null);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   // Presentación seleccionada activamente en cada tarjeta de producto (por defecto null = unidad base)
   const [cardSelectedPres, setCardSelectedPres] = useState<Record<number, number | null>>({});
@@ -284,7 +287,7 @@ export default function PosView({
 
   const selectedClient = clients.find((c) => c.id === selectedClientId);
 
-  const handleProcessOrder = async () => {
+  const handleOpenCheckoutModal = () => {
     if (cart.length === 0) {
       setNotification({ type: 'error', text: 'El carrito está vacío.' });
       return;
@@ -298,7 +301,23 @@ export default function PosView({
       return;
     }
 
+    setCheckoutError(null);
+    setShowCheckoutModal(true);
+  };
+
+  const handleProcessOrder = async () => {
+    if (cart.length === 0) {
+      setCheckoutError('El carrito está vacío.');
+      return;
+    }
+
+    if (!currentRate || rateValue <= 0) {
+      setCheckoutError('Debes registrar la tasa de cambio del día antes de procesar ventas.');
+      return;
+    }
+
     setLoading(true);
+    setCheckoutError(null);
     setNotification(null);
 
     try {
@@ -349,9 +368,11 @@ export default function PosView({
         });
         onOrderCompleted();
       } else {
+        setCheckoutError(data.message || 'Error al guardar la venta');
         setNotification({ type: 'error', text: data.message || 'Error al guardar la venta' });
       }
     } catch {
+      setCheckoutError('Error de conexión al procesar el pedido');
       setNotification({ type: 'error', text: 'Error de conexión al procesar el pedido' });
     } finally {
       setLoading(false);
@@ -399,11 +420,10 @@ export default function PosView({
       {/* Notifications */}
       {notification && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 ${
-            notification.type === 'success'
+          className={`p-4 rounded-xl flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 ${notification.type === 'success'
               ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
               : 'bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400'
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             {notification.type === 'success' ? (
@@ -434,11 +454,10 @@ export default function PosView({
               placeholder="Buscar producto por nombre..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full rounded-2xl pl-10 pr-24 py-2.5 text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm transition-colors ${
-                isDarkMode
+              className={`w-full rounded-2xl pl-10 pr-24 py-2.5 text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm transition-colors ${isDarkMode
                   ? 'bg-slate-900 border-slate-800 text-white placeholder-slate-500'
                   : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
-              }`}
+                }`}
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-slate-400">
               {filteredProducts.length} productos
@@ -470,15 +489,14 @@ export default function PosView({
               return (
                 <div
                   key={p.id}
-                  className={`group relative rounded-2xl border transition-all flex flex-col justify-between overflow-hidden shadow-sm ${
-                    currentQty > 0
+                  className={`group relative rounded-2xl border transition-all flex flex-col justify-between overflow-hidden shadow-sm ${currentQty > 0
                       ? isDarkMode
                         ? 'border-indigo-500/70 bg-indigo-950/20 shadow-indigo-900/20'
                         : 'border-indigo-500 bg-indigo-50/40 shadow-indigo-100'
                       : isDarkMode
-                      ? 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                      : 'bg-white border-slate-200/90 hover:border-slate-300'
-                  }`}
+                        ? 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                        : 'bg-white border-slate-200/90 hover:border-slate-300'
+                    }`}
                 >
                   {/* Badge de cantidad en carrito */}
                   {totalBaseInCart > 0 && (
@@ -491,32 +509,35 @@ export default function PosView({
 
                   {/* Contenido Visual Superior */}
                   <div className="p-3.5 pb-2">
-                    <h4 className={`font-semibold text-xs line-clamp-2 mb-1 pr-6 ${
-                      currentQty > 0
-                        ? 'text-indigo-600 dark:text-indigo-300'
-                        : isDarkMode
-                        ? 'text-white'
-                        : 'text-slate-900'
-                    }`}>
+                    <h4
+                      className={`font-semibold text-xs line-clamp-2 mb-1 pr-6 ${currentQty > 0
+                          ? 'text-indigo-600 dark:text-indigo-300'
+                          : isDarkMode
+                            ? 'text-white'
+                            : 'text-slate-900'
+                        }`}
+                    >
                       {p.nombre}
                     </h4>
 
                     {/* Stock & Tax Indicator */}
                     <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                        stockNum > 10
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          : stockNum > 0
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                      }`}>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${stockNum > 10
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                            : stockNum > 0
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                              : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                          }`}
+                      >
                         {stockNum <= 0 ? 'Agotado (0)' : formatStockDesglose(p)}
                       </span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                        Number(p.impuesto_porcentaje) === 0
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold'
-                          : 'text-slate-400'
-                      }`}>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${Number(p.impuesto_porcentaje) === 0
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold'
+                            : 'text-slate-400'
+                          }`}
+                      >
                         {Number(p.impuesto_porcentaje) === 0 ? 'Exento (0%)' : p.impuesto_nombre || 'IVA 16%'}
                       </span>
                     </div>
@@ -538,13 +559,12 @@ export default function PosView({
                                   e.stopPropagation();
                                   setCardSelectedPres((prev) => ({ ...prev, [p.id]: op.id }));
                                 }}
-                                className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition ${
-                                  isSelected
+                                className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition ${isSelected
                                     ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm font-bold'
                                     : isDarkMode
-                                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                                    : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                                }`}
+                                      ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                                  }`}
                               >
                                 {op.nombre}
                               </button>
@@ -571,9 +591,10 @@ export default function PosView({
                   </div>
 
                   {/* Botones de Restar, Input de Cantidad y Sumar */}
-                  <div className={`p-2 pt-1.5 border-t flex items-center gap-1.5 transition-colors ${
-                    isDarkMode ? 'bg-slate-950/70 border-slate-800/80' : 'bg-white border-slate-100'
-                  }`}>
+                  <div
+                    className={`p-2 pt-1.5 border-t flex items-center gap-1.5 transition-colors ${isDarkMode ? 'bg-slate-950/70 border-slate-800/80' : 'bg-white border-slate-100'
+                      }`}
+                  >
                     <button
                       type="button"
                       onClick={(e) => {
@@ -582,15 +603,14 @@ export default function PosView({
                       }}
                       disabled={currentQty === 0}
                       title="Restar 1 unidad"
-                      className={`p-1.5 rounded-xl text-xs font-semibold flex items-center justify-center transition-all ${
-                        currentQty > 0
+                      className={`p-1.5 rounded-xl text-xs font-semibold flex items-center justify-center transition-all ${currentQty > 0
                           ? isDarkMode
                             ? 'bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 active:scale-95 cursor-pointer'
                             : 'bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 active:scale-95 cursor-pointer shadow-sm'
                           : isDarkMode
-                          ? 'bg-slate-900/40 text-slate-600 border border-slate-800/60 cursor-not-allowed opacity-40'
-                          : 'bg-slate-100 text-slate-300 border border-slate-200/80 cursor-not-allowed opacity-50'
-                      }`}
+                            ? 'bg-slate-900/40 text-slate-600 border border-slate-800/60 cursor-not-allowed opacity-40'
+                            : 'bg-slate-100 text-slate-300 border border-slate-200/80 cursor-not-allowed opacity-50'
+                        }`}
                     >
                       <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
@@ -614,15 +634,14 @@ export default function PosView({
                             }
                           }
                         }}
-                        className={`w-full text-center text-xs font-bold font-mono py-1 rounded-xl border focus:ring-2 focus:ring-indigo-500/50 outline-none transition ${
-                          currentQty > 0
+                        className={`w-full text-center text-xs font-bold font-mono py-1 rounded-xl border focus:ring-2 focus:ring-indigo-500/50 outline-none transition ${currentQty > 0
                             ? isDarkMode
                               ? 'bg-indigo-950/50 border-indigo-500/50 text-indigo-300 font-black'
                               : 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black'
                             : isDarkMode
-                            ? 'bg-slate-800/80 border-slate-700 text-slate-300 placeholder-slate-500'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 placeholder-slate-400'
-                        }`}
+                              ? 'bg-slate-800/80 border-slate-700 text-slate-300 placeholder-slate-500'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 placeholder-slate-400'
+                          }`}
                         title={`Escribe la cantidad de ${activeOpcion.nombre}`}
                       />
                     </div>
@@ -635,11 +654,10 @@ export default function PosView({
                         addToCart(p, activePresId);
                       }}
                       title={`Sumar 1 ${activeOpcion.nombre}`}
-                      className={`p-1.5 rounded-xl text-xs font-semibold flex items-center justify-center transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                        isDarkMode
+                      className={`p-1.5 rounded-xl text-xs font-semibold flex items-center justify-center transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${isDarkMode
                           ? 'bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60'
                           : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
-                      }`}
+                        }`}
                     >
                       <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
@@ -652,13 +670,15 @@ export default function PosView({
 
         {/* Current Order / Cart Panel (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className={`rounded-2xl border shadow-xl flex flex-col h-[700px] transition-colors ${
-            isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-md'
-          }`}>
+          <div
+            className={`rounded-2xl border shadow-xl flex flex-col h-[700px] transition-colors ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-md'
+              }`}
+          >
             {/* Cart Header */}
-            <div className={`p-4 border-b flex items-center justify-between ${
-              isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200'
-            }`}>
+            <div
+              className={`p-4 border-b flex items-center justify-between ${isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+            >
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-500/20">
                   <ShoppingCart className="w-5 h-5" />
@@ -683,13 +703,15 @@ export default function PosView({
             </div>
 
             {/* Client Selector & Stock Negativo Toggle */}
-            <div className={`p-4 border-b space-y-2 ${
-              isDarkMode ? 'bg-slate-950/20 border-slate-800' : 'bg-white border-slate-100'
-            }`}>
+            <div
+              className={`p-4 border-b space-y-2 ${isDarkMode ? 'bg-slate-950/20 border-slate-800' : 'bg-white border-slate-100'
+                }`}
+            >
               <div className="flex items-center justify-between">
-                <label className={`text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
-                  isDarkMode ? 'text-slate-400' : 'text-slate-600'
-                }`}>
+                <label
+                  className={`text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'
+                    }`}
+                >
                   <User className="w-3.5 h-3.5 text-indigo-500" /> Cliente / Tercero *
                 </label>
                 <button
@@ -704,11 +726,10 @@ export default function PosView({
               <select
                 value={selectedClientId}
                 onChange={(e) => setSelectedClientId(Number(e.target.value))}
-                className={`w-full rounded-xl px-3 py-2 text-xs border font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
-                  isDarkMode
+                className={`w-full rounded-xl px-3 py-2 text-xs border font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${isDarkMode
                     ? 'bg-slate-800/80 border-slate-700/80 text-white'
                     : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
+                  }`}
               >
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -733,9 +754,10 @@ export default function PosView({
             </div>
 
             {/* Cart Items List */}
-            <div className={`flex-1 overflow-y-auto p-4 space-y-2.5 divide-y ${
-              isDarkMode ? 'divide-slate-800/40' : 'divide-slate-100'
-            }`}>
+            <div
+              className={`flex-1 overflow-y-auto p-4 space-y-2.5 divide-y ${isDarkMode ? 'divide-slate-800/40' : 'divide-slate-100'
+                }`}
+            >
               {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center py-16">
                   <ShoppingCart className="w-12 h-12 mb-2 opacity-25" />
@@ -755,9 +777,10 @@ export default function PosView({
                       className="pt-2.5 first:pt-0 flex items-center justify-between gap-2.5"
                     >
                       <div className="min-w-0 flex-1 space-y-1">
-                        <div className={`font-semibold text-xs truncate ${
-                          isDarkMode ? 'text-white' : 'text-slate-900'
-                        }`}>
+                        <div
+                          className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-slate-900'
+                            }`}
+                        >
                           {item.producto.nombre}
                         </div>
 
@@ -770,11 +793,10 @@ export default function PosView({
                                 const val = e.target.value === '' ? null : Number(e.target.value);
                                 changeItemPresentation(item.id, val);
                               }}
-                              className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                                isDarkMode
+                              className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isDarkMode
                                   ? 'bg-slate-800 border-slate-700 text-indigo-300'
                                   : 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                              }`}
+                                }`}
                             >
                               {opciones.map((op) => (
                                 <option key={op.id ?? 'base'} value={op.id ?? ''}>
@@ -788,11 +810,12 @@ export default function PosView({
                             </span>
                           )}
 
-                          <span className={`text-[10px] font-semibold ${
-                            taxPct === 0
-                              ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded'
-                              : 'text-amber-500'
-                          }`}>
+                          <span
+                            className={`text-[10px] font-semibold ${taxPct === 0
+                                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 rounded'
+                                : 'text-amber-500'
+                              }`}
+                          >
                             {taxPct === 0 ? '(Exento 0%)' : `(IVA: ${taxPct}%)`}
                           </span>
                         </div>
@@ -804,9 +827,10 @@ export default function PosView({
 
                       {/* Quantity Controller */}
                       <div className="flex items-center gap-2 shrink-0">
-                        <div className={`flex items-center rounded-lg border ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'
-                        }`}>
+                        <div
+                          className={`flex items-center rounded-lg border ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'
+                            }`}
+                        >
                           <button
                             type="button"
                             onClick={() => updateQuantity(item.id, -1)}
@@ -825,9 +849,8 @@ export default function PosView({
                                 setDirectQuantity(item.id, val);
                               }
                             }}
-                            className={`w-12 text-center text-xs font-bold font-mono bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded py-0.5 px-0.5 outline-none ${
-                              isDarkMode ? 'text-white' : 'text-slate-900'
-                            }`}
+                            className={`w-12 text-center text-xs font-bold font-mono bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded py-0.5 px-0.5 outline-none ${isDarkMode ? 'text-white' : 'text-slate-900'
+                              }`}
                             title="Escribe la cantidad directamente"
                           />
                           <button
@@ -861,16 +884,15 @@ export default function PosView({
             </div>
 
             {/* Order Totals & Action with Tax Breakdown */}
-            <div className={`p-4 border-t space-y-2.5 ${
-              isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-            }`}>
+            <div
+              className={`p-4 border-t space-y-2.5 ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+            >
               <div className={`space-y-1 text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                 {baseExentaUsd > 0 && (
                   <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
                     <span>Base Exenta (0%):</span>
-                    <span className="font-mono font-semibold">
-                      ${baseExentaUsd.toFixed(2)}
-                    </span>
+                    <span className="font-mono font-semibold">${baseExentaUsd.toFixed(2)}</span>
                   </div>
                 )}
                 {baseGravadaUsd > 0 && (
@@ -891,9 +913,7 @@ export default function PosView({
                 )}
                 <div className="flex justify-between text-amber-600 dark:text-amber-400">
                   <span>Impuesto (IVA):</span>
-                  <span className="font-mono font-semibold">
-                    +${montoImpuestoUsd.toFixed(2)}
-                  </span>
+                  <span className="font-mono font-semibold">+${montoImpuestoUsd.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-baseline pt-1 border-t border-slate-200 dark:border-slate-800">
                   <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -903,12 +923,14 @@ export default function PosView({
                     ${totalUsd.toFixed(2)}
                   </span>
                 </div>
-                <div className={`flex justify-between items-baseline border-t pt-1 ${
-                  isDarkMode ? 'border-slate-800' : 'border-slate-200'
-                }`}>
-                  <span className={`text-xs font-bold uppercase tracking-wider ${
-                    isDarkMode ? 'text-indigo-300' : 'text-indigo-600'
-                  }`}>
+                <div
+                  className={`flex justify-between items-baseline border-t pt-1 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                    }`}
+                >
+                  <span
+                    className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-indigo-300' : 'text-indigo-600'
+                      }`}
+                  >
                     Total Moneda Local:
                   </span>
                   <span className="text-xl font-black font-mono text-indigo-600 dark:text-indigo-400">
@@ -920,19 +942,11 @@ export default function PosView({
 
               <button
                 type="button"
-                onClick={handleProcessOrder}
+                onClick={handleOpenCheckoutModal}
                 disabled={cart.length === 0 || loading || rateValue <= 0}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Procesando Venta...
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="w-4 h-4" /> Cobrar y Descontar Inventario
-                  </>
-                )}
+                <Receipt className="w-4 h-4" /> Cobrar y Descontar Inventario
               </button>
             </div>
           </div>
@@ -942,9 +956,10 @@ export default function PosView({
       {/* Quick Client Modal */}
       {showQuickClientModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 transition-all ${
-            isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
+          <div
+            className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 transition-all ${isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+              }`}
+          >
             <h3 className="text-base font-bold mb-3 flex items-center gap-2">
               <UserPlus className="w-4 h-4 text-indigo-500" />
               Nuevo Cliente Rápido
@@ -958,9 +973,8 @@ export default function PosView({
                   placeholder="Ej: V-12345678"
                   value={quickClientData.identificacion}
                   onChange={(e) => setQuickClientData({ ...quickClientData, identificacion: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border text-sm uppercase ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-xl border text-sm uppercase ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
                 />
               </div>
               <div>
@@ -971,9 +985,8 @@ export default function PosView({
                   placeholder="Ej: María Rodríguez"
                   value={quickClientData.razon_social_nombre}
                   onChange={(e) => setQuickClientData({ ...quickClientData, razon_social_nombre: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border text-sm ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-xl border text-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
                 />
               </div>
               <div>
@@ -983,9 +996,8 @@ export default function PosView({
                   placeholder="Ej: 0412-1234567"
                   value={quickClientData.telefono}
                   onChange={(e) => setQuickClientData({ ...quickClientData, telefono: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border text-sm ${
-                    isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-xl border text-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                    }`}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -1008,96 +1020,271 @@ export default function PosView({
         </div>
       )}
 
-      {/* Recibo modal último pedido completado */}
-      {lastCompletedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className={`border rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 ${
-            isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className="text-center space-y-1">
-              <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-500/20">
-                <CheckCircle2 className="w-7 h-7" />
-              </div>
-              <h3 className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                ¡Venta Exitosa!
-              </h3>
-              <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Comprobante de Pedido #{lastCompletedOrder.id}
-              </p>
-              <div className="mt-2 flex justify-center">
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <CheckCircle2 className="w-3 h-3" /> Estado: Completo
-                </span>
-              </div>
-            </div>
-
-            <div className={`p-3.5 rounded-xl border space-y-2 text-xs ${
-              isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div className="flex justify-between text-slate-500">
-                <span>Cliente:</span>
-                <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  {lastCompletedOrder.cliente_nombre || 'Cliente General'}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>RIF / Cédula:</span>
-                <span className="font-mono text-slate-400">
-                  {lastCompletedOrder.cliente_identificacion || 'V-00000000'}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Tasa aplicada:</span>
-                <span className={`font-mono ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  {Number(lastCompletedOrder.tasa_cambio_aplicada).toFixed(4)}
-                </span>
-              </div>
-              <div className={`border-t pt-2 space-y-1 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-                {lastCompletedOrder.lineas?.map((l: any, i: number) => (
-                  <div key={i} className="flex justify-between text-[11px]">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>
-                      {l.cantidad}x {l.nombre}
-                    </span>
-                    <span className="font-mono">${Number(l.subtotal).toFixed(2)}</span>
+      {/* Modal de Cobro: Confirmación previa (evita errores de dedo) y Recibo final */}
+      {(showCheckoutModal || lastCompletedOrder) && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in"
+          onClick={() => {
+            if (!loading) {
+              setShowCheckoutModal(false);
+              setLastCompletedOrder(null);
+              setCheckoutError(null);
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`border rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+              }`}
+          >
+            {lastCompletedOrder ? (
+              /* FASE 2: Recibo de Venta Exitosa (Pedido registrado e inventario descontado) */
+              <>
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-500/20">
+                    <CheckCircle2 className="w-7 h-7" />
                   </div>
-                ))}
-              </div>
-              <div className={`border-t pt-2 space-y-1 text-slate-500 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
-                <div className="flex justify-between text-[11px]">
-                  <span>Base Imponible:</span>
-                  <span className="font-mono">${Number(lastCompletedOrder.base_imponible_usd || 0).toFixed(2)}</span>
+                  <h3 className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    ¡Venta Exitosa!
+                  </h3>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Comprobante de Pedido #{lastCompletedOrder.id}
+                  </p>
+                  <div className="mt-2 flex justify-center">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <CheckCircle2 className="w-3 h-3" /> Estado: Completo
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[11px] text-amber-500">
-                  <span>Impuesto (IVA):</span>
-                  <span className="font-mono">+${Number(lastCompletedOrder.monto_impuesto_usd || 0).toFixed(2)}</span>
-                </div>
-              </div>
-              <div className={`border-t pt-2 flex justify-between font-bold ${
-                isDarkMode ? 'border-slate-800 text-white' : 'border-slate-200 text-slate-900'
-              }`}>
-                <span>Total USD:</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                  ${Number(lastCompletedOrder.total_usd).toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between font-bold text-indigo-600 dark:text-indigo-400">
-                <span>Total Local:</span>
-                <span className="font-mono">
-                  {Number(lastCompletedOrder.total_moneda_local).toLocaleString('es-VE', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  Bs.
-                </span>
-              </div>
-            </div>
 
-            <button
-              onClick={() => setLastCompletedOrder(null)}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-md shadow-indigo-600/20"
-            >
-              Cerrar y Continuar
-            </button>
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 text-xs ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                >
+                  <div className="flex justify-between text-slate-500">
+                    <span>Cliente:</span>
+                    <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {lastCompletedOrder.cliente_nombre || 'Cliente General'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>RIF / Cédula:</span>
+                    <span className="font-mono text-slate-400">
+                      {lastCompletedOrder.cliente_identificacion || 'V-00000000'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Tasa aplicada:</span>
+                    <span className={`font-mono ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {Number(lastCompletedOrder.tasa_cambio_aplicada).toFixed(4)}
+                    </span>
+                  </div>
+                  <div
+                    className={`border-t pt-2 space-y-1 max-h-40 overflow-y-auto pr-1 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                      }`}
+                  >
+                    {lastCompletedOrder.lineas?.map((l: any, i: number) => (
+                      <div key={i} className="flex justify-between text-[11px]">
+                        <span className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>
+                          {l.cantidad}x {l.nombre}
+                        </span>
+                        <span className="font-mono">${Number(l.subtotal).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    className={`border-t pt-2 space-y-1 text-slate-500 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                      }`}
+                  >
+                    <div className="flex justify-between text-[11px]">
+                      <span>Base Imponible:</span>
+                      <span className="font-mono">${Number(lastCompletedOrder.base_imponible_usd || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-amber-500">
+                      <span>Impuesto (IVA):</span>
+                      <span className="font-mono">+${Number(lastCompletedOrder.monto_impuesto_usd || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`border-t pt-2 flex justify-between font-bold ${isDarkMode ? 'border-slate-800 text-white' : 'border-slate-200 text-slate-900'
+                      }`}
+                  >
+                    <span>Total USD:</span>
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      ${Number(lastCompletedOrder.total_usd).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-bold text-indigo-600 dark:text-indigo-400">
+                    <span>Total Local:</span>
+                    <span className="font-mono">
+                      {Number(lastCompletedOrder.total_moneda_local).toLocaleString('es-VE', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      Bs.
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLastCompletedOrder(null);
+                    setShowCheckoutModal(false);
+                    setCheckoutError(null);
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-md shadow-indigo-600/20 cursor-pointer"
+                >
+                  Cerrar y Continuar
+                </button>
+              </>
+            ) : (
+              /* FASE 1: Confirmación de Cobro (Evita errores de dedo) */
+              <>
+                <div className="relative text-center space-y-1">
+                  {!loading && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCheckoutModal(false);
+                        setCheckoutError(null);
+                      }}
+                      className="absolute -top-1 -right-1 text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg text-sm leading-none"
+                      title="Cancelar"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-500/20">
+                    <Receipt className="w-6 h-6" />
+                  </div>
+                  <h3 className={`text-lg font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Confirmar Venta y Cobro
+                  </h3>
+                  <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Verifica los detalles antes de procesar el pago y descontar el inventario
+                  </p>
+                  <div className="mt-2 flex justify-center">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      <AlertCircle className="w-3 h-3" /> Confirmación Requerida
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 text-xs ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                >
+                  <div className="flex justify-between text-slate-500">
+                    <span>Cliente:</span>
+                    <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {selectedClient?.razon_social_nombre || 'Cliente Genérico / Venta Mostrador'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>RIF / Cédula:</span>
+                    <span className="font-mono text-slate-400">
+                      {selectedClient?.identificacion || 'V-00000000'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Tasa aplicada:</span>
+                    <span className={`font-mono ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {rateValue.toFixed(4)}
+                    </span>
+                  </div>
+
+                  {/* Detalle de productos en carrito */}
+                  <div
+                    className={`border-t pt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                      }`}
+                  >
+                    {cart.map((c, i) => (
+                      <div key={i} className="flex justify-between items-center text-[11px]">
+                        <span className={`truncate max-w-[190px] ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                          {c.cantidad}x {c.presentacion_id ? `${c.producto.nombre} (${c.presentacion_nombre})` : c.producto.nombre}
+                        </span>
+                        <span className="font-mono shrink-0">${(c.precio_unitario_usd * c.cantidad).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className={`border-t pt-2 space-y-1 text-slate-500 ${isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                      }`}
+                  >
+                    <div className="flex justify-between text-[11px]">
+                      <span>Base Imponible:</span>
+                      <span className="font-mono">${baseImponibleUsd.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-amber-500">
+                      <span>Impuesto (IVA):</span>
+                      <span className="font-mono">+${montoImpuestoUsd.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`border-t pt-2 flex justify-between font-bold ${isDarkMode ? 'border-slate-800 text-white' : 'border-slate-200 text-slate-900'
+                      }`}
+                  >
+                    <span>Total USD:</span>
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      ${totalUsd.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-bold text-indigo-600 dark:text-indigo-400">
+                    <span>Total Local:</span>
+                    <span className="font-mono">
+                      {totalLocal.toLocaleString('es-VE', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      Bs.
+                    </span>
+                  </div>
+                </div>
+
+                {checkoutError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{checkoutError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCheckoutModal(false);
+                      setCheckoutError(null);
+                    }}
+                    disabled={loading}
+                    className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-semibold transition cursor-pointer ${isDarkMode
+                        ? 'border-slate-700 hover:bg-slate-800 text-slate-300'
+                        : 'border-slate-300 hover:bg-slate-100 text-slate-700'
+                      } disabled:opacity-50`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleProcessOrder}
+                    disabled={loading}
+                    className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" /> Cobrar y Descontar
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
