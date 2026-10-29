@@ -13,6 +13,7 @@ import {
   Truck,
   Layers,
   Info,
+  Download,
   X
 } from 'lucide-react';
 
@@ -42,7 +43,13 @@ export default function MantenimientoModal({
   const [selectedAction, setSelectedAction] = useState<'reset_ventas' | 'reset_compras' | 'reset_ambos'>('reset_ambos');
   const [resetStock, setResetStock] = useState(false);
   const [newStockValue, setNewStockValue] = useState<number>(0);
-  const [confirmPhrase, setConfirmPhrase] = useState('');
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+
+  const handleDownloadBackup = () => {
+    setDownloadingBackup(true);
+    window.location.href = '/api/respaldo';
+    setTimeout(() => setDownloadingBackup(false), 2000);
+  };
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; details?: string[] } | null>(null);
 
   const fetchStats = async () => {
@@ -199,6 +206,24 @@ export default function MantenimientoModal({
                 </div>
                 <div className="text-[11px] text-slate-500">Productos en Catálogo</div>
               </div>
+            </div>
+
+            {/* Quick Backup Trigger Button inside Modal */}
+            <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between">
+              <span className="text-xs text-slate-500">¿Quieres asegurar una copia antes de cualquier cambio?</span>
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                disabled={downloadingBackup}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition ${
+                  isDarkMode
+                    ? 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 shadow-sm'
+                }`}
+              >
+                <Download className={`w-3.5 h-3.5 text-indigo-500 ${downloadingBackup ? 'animate-bounce' : ''}`} />
+                {downloadingBackup ? 'Descargando...' : 'Descargar Copia SQL'}
+              </button>
             </div>
           </div>
 

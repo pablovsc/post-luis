@@ -1,0 +1,31 @@
+1. ¿Cómo crear el acceso directo en tu Escritorio?
+
+Simplemente haz doble clic sobre este archivo en la carpeta del proyecto: 👉 generar_acceso_directo.bat
+
+Esto generará automáticamente en tu Escritorio y en la carpeta del proyecto el acceso directo: Tienda Express POS (Node).lnk
+
+2. ¿Qué hace al abrirlo?
+
+El acceso directo ejecuta iniciar-pos-node.bat, el cual:
+
+Comprueba que Node.js esté disponible.
+Si faltase alguna librería, ejecuta npm install automáticamente.
+Inicia en segundo plano el actualizador de tasa BCV.
+Abre automáticamente tu navegador en http://localhost:3000.
+Inicia el servidor de Next.js.
+Para apagar el sistema, solo cierras esa ventana de comando.
+3. Muy Importante sobre la Base de Datos (PostgreSQL):
+
+Al no usar Docker para la aplicación:
+
+Si instalas PostgreSQL directo en Windows:
+Solo necesitas instalar PostgreSQL (versión 14, 15 o 16 desde postgresql.org
+).
+Creas la base de datos luis y ejecutas el script init.sql.
+Los parámetros por defecto que busca el sistema son:
+Host: localhost
+Puerto: 5432
+Base de Datos: luis
+Usuario: adempiere
+Contraseña: adempiere
+Si usas otra contraseña o usuario, puedes cambiarla directamente desde la aplicación web en la barra superior con el botón "Configurar BD" o en el archivo .env.
