@@ -1,9 +1,9 @@
 @echo off
-title Tienda Express POS (Modo Nativo Node.js)
+title Tienda Express POS (Modo Produccion)
 color 0A
 
 echo ========================================================
-echo    TIENDA EXPRESS POS - INICIANDO SISTEMA CON NODE.JS
+echo    TIENDA EXPRESS POS - INICIANDO (MODO PRODUCCION)
 echo ========================================================
 echo.
 
@@ -25,21 +25,34 @@ if not exist "node_modules\" (
     call npm install
 )
 
-REM 3. Iniciar el scraper de tasa BCV en segundo plano con actualizacion continua
+REM 3. Verificar si el proyecto ya fue compilado para produccion (.next)
+if not exist ".next\" (
+    echo [INFO] No se encontro compilacion previa (.next).
+    echo Compilando aplicacion para produccion por primera vez (npm run build)...
+    call npm run build
+    if %errorlevel% neq 0 (
+        echo [ERROR] Fallo la compilacion. Iniciando en modo dev como respaldo...
+        call npm run dev
+        exit /b 1
+    )
+)
+
+REM 4. Iniciar el scraper de tasa BCV en segundo plano con actualizacion continua
 if exist "scrape-bcv.js" (
     echo [INFO] Consultando y sincronizando tasa oficial del BCV...
     start "BCV Tasa Background" /min cmd /c "node scrape-bcv.js --daemon"
 )
 
-REM 4. Abrir automáticamente el navegador tras 3 segundos
+REM 5. Abrir automáticamente el navegador tras 3 segundos
 start "" cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:3000"
 
-REM 5. Iniciar la aplicación Next.js
-echo [INFO] Servidor web iniciando en http://localhost:3000 ...
+REM 6. Iniciar la aplicación Next.js en MODO PRODUCCIÓN (npm start)
+echo [INFO] Servidor de produccion iniciando en http://localhost:3000 ...
+echo [INFO] Rendimiento optimizado al maximo.
 echo [INFO] Para detener el sistema, simplemente cierra esta ventana.
 echo.
 
-call npm run dev
+call npm start
 
 pause
 
