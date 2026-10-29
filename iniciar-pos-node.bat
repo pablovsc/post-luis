@@ -52,7 +52,9 @@ echo [INFO] Rendimiento optimizado al maximo.
 echo [INFO] Para detener el sistema, simplemente cierra esta ventana.
 echo.
 
-call npx --no-install next start -p 3000
+node "node_modules\next\dist\bin\next" start -p 3000
 
+echo.
+echo [AVISO] El proceso se detuvo con codigo: %errorlevel%
 pause
 
