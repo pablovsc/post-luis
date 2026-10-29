@@ -43,6 +43,7 @@ export default function MantenimientoModal({
   const [selectedAction, setSelectedAction] = useState<'reset_ventas' | 'reset_compras' | 'reset_ambos'>('reset_ambos');
   const [resetStock, setResetStock] = useState(false);
   const [newStockValue, setNewStockValue] = useState<number>(0);
+  const [confirmPhrase, setConfirmPhrase] = useState('');
   const [downloadingBackup, setDownloadingBackup] = useState(false);
 
   const handleDownloadBackup = () => {

@@ -23,11 +23,14 @@ if not exist "node_modules\" (
     call npm install
 )
 
-echo [INFO] Ejecutando compilacion optimizada (npm run build)...
+set NEXT_TELEMETRY_DISABLED=1
+set NEXT_DISABLE_UPGRADE_CHECK=1
+
+echo [INFO] Ejecutando compilacion optimizada (next build)...
 echo Esto puede tardar 1 o 2 minutos. Por favor espera...
 echo.
 
-call npm run build
+call npx --no-install next build
 
 if %errorlevel% equ 0 (
     echo.
