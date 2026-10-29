@@ -4,14 +4,16 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 ' Obtener la ruta del directorio actual
 currentDir = fso.GetAbsolutePathName(".")
 batPath = currentDir & "\iniciar-pos-node.bat"
+cmdPath = WshShell.ExpandEnvironmentStrings("%SystemRoot%") & "\System32\cmd.exe"
 
 ' Ruta del Escritorio del usuario
 desktopPath = WshShell.SpecialFolders("Desktop")
 shortcutDesktop = desktopPath & "\Tienda Express POS (Node).lnk"
 
-' Crear acceso directo en el Escritorio
+' Crear acceso directo en el Escritorio invocando cmd.exe /c "bat"
 Set oLinkDesktop = WshShell.CreateShortcut(shortcutDesktop)
-oLinkDesktop.TargetPath = batPath
+oLinkDesktop.TargetPath = cmdPath
+oLinkDesktop.Arguments = "/c """ & batPath & """"
 oLinkDesktop.WorkingDirectory = currentDir
 oLinkDesktop.Description = "Iniciar Tienda Express POS con Node.js (Sin Docker)"
 oLinkDesktop.WindowStyle = 1
@@ -27,7 +29,8 @@ oLinkDesktop.Save
 ' Crear también un acceso directo dentro de la carpeta del proyecto c:\app\post-luis
 shortcutFolder = currentDir & "\Tienda Express POS (Node).lnk"
 Set oLinkFolder = WshShell.CreateShortcut(shortcutFolder)
-oLinkFolder.TargetPath = batPath
+oLinkFolder.TargetPath = cmdPath
+oLinkFolder.Arguments = "/c """ & batPath & """"
 oLinkFolder.WorkingDirectory = currentDir
 oLinkFolder.Description = "Iniciar Tienda Express POS con Node.js (Sin Docker)"
 oLinkFolder.WindowStyle = 1
@@ -38,5 +41,5 @@ ElseIf fso.FileExists(currentDir & "\app.ico") Then
 End If
 oLinkFolder.Save
 
-WScript.Echo "Acceso directo creado exitosamente en el Escritorio y en la carpeta del proyecto."
+WScript.Echo "Acceso directo actualizado exitosamente en el Escritorio."
 

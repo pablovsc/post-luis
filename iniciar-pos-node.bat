@@ -52,7 +52,7 @@ echo [INFO] Rendimiento optimizado al maximo.
 echo [INFO] Para detener el sistema, simplemente cierra esta ventana.
 echo.
 
-call npm start
+call npx --no-install next start -p 3000
 
 pause
 
