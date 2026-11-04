@@ -91,6 +91,8 @@ export default function PosView({
     return d.toISOString().split('T')[0];
   });
 
+  const rateValue = currentRate ? Number(currentRate.tasa) : 0;
+
   // Filtrar cuentas o cajas según el tipo de pago seleccionado en el POS
   const posSelectedTp = tiposPago.find((t) => t.id === selectedTipoPagoId);
   const posIsEfectivo = posSelectedTp?.codigo?.startsWith('EFECTIVO');
