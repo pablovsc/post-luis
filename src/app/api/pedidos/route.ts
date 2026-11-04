@@ -299,8 +299,8 @@ export async function POST(req: Request) {
 
     const nuevoPedido = pedidoRes.rows[0];
 
-    // Si registrar_pago es true (o no es crédito sin abono inicial), crear registro en t_pago
-    if (registrar_pago && condicion_pago === 'CONTADO' || (registrar_pago && Number(monto_pago) > 0)) {
+    // Si registrar_pago es true (o no es crédito sin abono inicial), crear registro en t_pago y t_pago_documento
+    if ((registrar_pago && condicion_pago === 'CONTADO') || (registrar_pago && Number(monto_pago) > 0)) {
       // Obtener moneda del tipo de pago seleccionado
       const tpRes = await client.query('SELECT moneda FROM m_tipopago WHERE id = $1', [Number(tipo_pago_id || 1)]);
       const tpMoneda = tpRes.rows.length > 0 ? tpRes.rows[0].moneda : 'USD';
@@ -313,14 +313,17 @@ export async function POST(req: Request) {
         ? Number((pagoOriginal / rate).toFixed(2))
         : pagoOriginal;
 
-      await client.query(
+      const tipoOperacion = condicion_pago === 'CONTADO' ? 'COBRO_VENTA' : 'ABONO_VENTA';
+
+      const pagoRes = await client.query(
         `INSERT INTO t_pago (
           tipo_operacion, pedido_id, tercero_id, tipo_pago_id, cuenta_bancaria_id,
           moneda, monto_original, tasa_cambio, monto_equivalente_usd,
           referencia, estado, creado_por
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'APROBADO', $11)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'APROBADO', $11)
+        RETURNING id`,
         [
-          'COBRO_VENTA',
+          tipoOperacion,
           nuevoPedido.id,
           assignedTerceroId,
           Number(tipo_pago_id || 1),
@@ -332,6 +335,17 @@ export async function POST(req: Request) {
           referencia_pago ? String(referencia_pago).trim() : null,
           usuario_id ? Number(usuario_id) : null,
         ]
+      );
+
+      const nuevoPagoId = pagoRes.rows[0].id;
+
+      // Imputar pago a la factura/pedido creado en t_pago_documento
+      await client.query(
+        `INSERT INTO t_pago_documento (
+          pago_id, tipo_documento, pedido_id,
+          monto_imputado_original, monto_imputado_usd
+        ) VALUES ($1, 'VENTA', $2, $3, $4)`,
+        [nuevoPagoId, nuevoPedido.id, pagoOriginal, pagoEquivUsd]
       );
 
       // Actualizar saldo de cuenta/caja receptora si fue seleccionada

@@ -211,6 +211,19 @@ CREATE TABLE IF NOT EXISTS t_pago (
     actualizado_por INT REFERENCES m_usuario(id)
 );
 
+-- 12.1 Tabla de Relación Documento - Pago (t_pago_documento)
+-- Permite imputación de múltiples pagos a una factura o un pago a múltiples facturas
+CREATE TABLE IF NOT EXISTS t_pago_documento (
+    id SERIAL PRIMARY KEY,
+    pago_id INT NOT NULL REFERENCES t_pago(id) ON DELETE CASCADE,
+    tipo_documento VARCHAR(20) NOT NULL CHECK (tipo_documento IN ('VENTA', 'COMPRA')),
+    pedido_id INT REFERENCES t_pedido(id) ON DELETE RESTRICT,
+    compra_id INT REFERENCES t_compra(id) ON DELETE RESTRICT,
+    monto_imputado_original NUMERIC(14, 2) NOT NULL CHECK (monto_imputado_original > 0),
+    monto_imputado_usd NUMERIC(14, 2) NOT NULL CHECK (monto_imputado_usd > 0),
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================================================================
 -- ÍNDICES DE RENDIMIENTO
 -- ==============================================================================
@@ -242,4 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_pago_tercero ON t_pago(tercero_id);
 CREATE INDEX IF NOT EXISTS idx_pago_tipopago ON t_pago(tipo_pago_id);
 CREATE INDEX IF NOT EXISTS idx_pago_cuenta ON t_pago(cuenta_bancaria_id);
 CREATE INDEX IF NOT EXISTS idx_pago_fecha ON t_pago(fecha_pago DESC);
+CREATE INDEX IF NOT EXISTS idx_pagodoc_pago ON t_pago_documento(pago_id);
+CREATE INDEX IF NOT EXISTS idx_pagodoc_pedido ON t_pago_documento(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_pagodoc_compra ON t_pago_documento(compra_id);
 

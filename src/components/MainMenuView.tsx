@@ -26,6 +26,8 @@ import {
   Database,
   ShieldAlert,
   Server,
+  Wallet,
+  Building2,
 } from 'lucide-react';
 import { Tasa, DashboardData, Usuario, ModuloPermiso } from '@/types';
 
@@ -142,24 +144,25 @@ export default function MainMenuView({
         : 'Ingreso a inventario',
     },
     {
-      id: 'orders',
+      id: 'pagos',
       num: '04',
-      title: 'Pedidos y Ventas',
-      subtitle: 'Historial completo de ventas, detalle de tickets y anulación con reversión de stock',
-      icon: Receipt,
-      gradient: 'from-emerald-500 via-teal-600 to-cyan-600',
-      badge: 'Con Anulación',
-      accentColor: 'text-emerald-500 dark:text-emerald-400',
-      glowColor: 'group-hover:shadow-emerald-500/25',
-      stat: 'Historial & Anulaciones',
+      title: 'Gestión de Pagos / Cobros',
+      subtitle: 'Cobros a clientes, abonos a créditos, pagos a proveedores y flujo de caja en bancos',
+      icon: Wallet,
+      gradient: 'from-teal-600 via-emerald-600 to-green-600',
+      badge: 'Tesorería',
+      accentColor: 'text-teal-500 dark:text-teal-400',
+      glowColor: 'group-hover:shadow-teal-500/25',
+      stat: 'Caja & Bancos',
     },
   ];
 
   // Group 2 (Second view - deslizar a la izquierda):
   // 5) Inventario / Productos
   // 6) Clientes / Proveedores
-  // 7) % Impuestos
-  // 8) Tasa de Cambio
+  // 7) Bancos / Cajas y Cuentas
+  // 8) % Impuestos
+  // 9) Tasa de Cambio
   const group2 = [
     {
       id: 'products',
@@ -186,8 +189,20 @@ export default function MainMenuView({
       stat: 'Gestión Comercial',
     },
     {
-      id: 'impuestos',
+      id: 'bancos',
       num: '07',
+      title: 'Bancos, Cajas y Cuentas',
+      subtitle: 'Creación de entidades bancarias, cajas físicas de efectivo y configuración de cuentas receptoras',
+      icon: Building2,
+      gradient: 'from-indigo-600 via-blue-600 to-cyan-600',
+      badge: 'Cuentas & Cajas',
+      accentColor: 'text-indigo-500 dark:text-indigo-400',
+      glowColor: 'group-hover:shadow-indigo-500/25',
+      stat: 'Entidades Financieras',
+    },
+    {
+      id: 'impuestos',
+      num: '08',
       title: '% Impuestos',
       subtitle: 'Configuración de alícuotas fiscales de IVA (16%, Exento 0% y reducidos)',
       icon: Percent,
@@ -199,7 +214,7 @@ export default function MainMenuView({
     },
     {
       id: 'rates',
-      num: '08',
+      num: '09',
       title: 'Tasa de Cambio (BCV)',
       subtitle: 'Monitoreo oficial de la tasa de cambio diaria y conversión automática en bolívares',
       icon: TrendingUp,
@@ -212,14 +227,27 @@ export default function MainMenuView({
   ];
 
   // Group 3 (Third view - Reportes, Rentabilidad e Inventario):
-  // 9) Reportes de Ventas por Fecha
-  // 10) Rentabilidad FIFO Venta vs Costo
-  // 11) Inventario & Valorización
+  // 10) Pedidos y Ventas (Historial & Anulaciones)
+  // 11) Reportes de Ventas por Fecha
+  // 12) Rentabilidad FIFO Venta vs Costo
+  // 13) Inventario & Valorización
   const group3 = [
+    {
+      id: 'orders',
+      num: '10',
+      title: 'Pedidos y Ventas',
+      subtitle: 'Historial completo de ventas, detalle de tickets y anulación con reversión de stock',
+      icon: Receipt,
+      gradient: 'from-emerald-500 via-teal-600 to-cyan-600',
+      badge: 'Historial & Anulación',
+      accentColor: 'text-emerald-500 dark:text-emerald-400',
+      glowColor: 'group-hover:shadow-emerald-500/25',
+      stat: 'Auditoría de Tickets',
+    },
     {
       id: 'reports',
       subTab: 'ventas',
-      num: '09',
+      num: '11',
       title: 'Ventas por Fecha',
       subtitle: 'Filtro por rangos (hoy, semana, mes, año), totales USD/Bs., desglose diario y exportación',
       icon: BarChart3,
@@ -232,7 +260,7 @@ export default function MainMenuView({
     {
       id: 'reports',
       subTab: 'rentabilidad',
-      num: '10',
+      num: '12',
       title: 'Rentabilidad FIFO',
       subtitle: 'Valuación PEPS por lote de compra, costo real, utilidad bruta y margen porcentual de ganancia',
       icon: TrendingUp,
@@ -245,7 +273,7 @@ export default function MainMenuView({
     {
       id: 'reports',
       subTab: 'inventario',
-      num: '11',
+      num: '13',
       title: 'Inventario & Valorización',
       subtitle: 'Existencias físicas desglosadas por presentación, capital al costo promedio, proyección a venta y alertas',
       icon: Boxes,
@@ -258,13 +286,13 @@ export default function MainMenuView({
   ];
 
   // Group 4 (Fourth view - Sistema, Usuarios y Base de Datos):
-  // 12) Usuarios y Permisos
-  // 13) Mantenimiento y Respaldos
-  // 14) Configuración de Base de Datos
+  // 14) Usuarios y Permisos
+  // 15) Mantenimiento y Respaldos
+  // 16) Configuración de Base de Datos
   const group4 = [
     {
       id: 'users',
-      num: '12',
+      num: '14',
       title: 'Usuarios y Permisos',
       subtitle: 'Administración de operadores, contraseñas, roles y niveles de acceso a componentes',
       icon: UserCog,
@@ -276,7 +304,7 @@ export default function MainMenuView({
     },
     {
       id: 'maintenance',
-      num: '13',
+      num: '15',
       title: 'Mantenimiento & Respaldos',
       subtitle: 'Limpieza de transacciones de prueba, reinicio de secuencias y descarga de copias SQL',
       icon: ShieldAlert,
@@ -291,7 +319,7 @@ export default function MainMenuView({
     },
     {
       id: 'db_config',
-      num: '14',
+      num: '16',
       title: 'Conexión a Base de Datos',
       subtitle: 'Verificar parámetros de PostgreSQL (Host, Puerto, Usuario, Base de datos y SSL)',
       icon: Database,
@@ -315,6 +343,7 @@ export default function MainMenuView({
     if (id === 'compras') return perms.includes('compras');
     if (id === 'products') return perms.includes('products');
     if (id === 'terceros') return perms.includes('terceros');
+    if (id === 'bancos') return perms.includes('terceros') || perms.includes('compras') || perms.includes('users');
     if (id === 'impuestos') return perms.includes('impuestos');
     if (id === 'rates') return perms.includes('rates');
     if (id === 'users') return perms.includes('users');

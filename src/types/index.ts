@@ -114,6 +114,34 @@ export interface CuentaBancaria {
 export type TipoOperacionPago = 'COBRO_VENTA' | 'PAGO_COMPRA' | 'ABONO_VENTA' | 'ABONO_COMPRA';
 export type EstadoPago = 'APROBADO' | 'ANULADO';
 
+export interface PagoDocumento {
+  id?: number;
+  pago_id?: number;
+  tipo_documento: 'VENTA' | 'COMPRA';
+  pedido_id?: number | null;
+  compra_id?: number | null;
+  numero_factura?: string | null;
+  monto_imputado_original: number;
+  monto_imputado_usd: number;
+  creado_en?: string;
+}
+
+export interface DocumentoPendiente {
+  id: number;
+  tipo_documento: 'VENTA' | 'COMPRA';
+  numero_documento: string;
+  fecha: string;
+  tercero_id: number;
+  tercero_nombre: string;
+  condicion_pago: string;
+  total_usd: number;
+  total_local: number;
+  total_pagado_usd: number;
+  saldo_pendiente_usd: number;
+  saldo_pendiente_local: number;
+  estado_pago: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+}
+
 export interface Pago {
   id: number;
   tipo_operacion: TipoOperacionPago;
@@ -121,10 +149,13 @@ export interface Pago {
   compra_id?: number | null;
   tercero_id?: number | null;
   tercero_nombre?: string | null;
+  tercero_identificacion?: string | null;
   tipo_pago_id: number;
   tipo_pago_nombre?: string;
   cuenta_bancaria_id?: number | null;
   cuenta_bancaria_nombre?: string | null;
+  banco_nombre?: string | null;
+  banco_tipo?: TipoEntidadFinanciera | null;
   fecha_pago: string;
   moneda: 'USD' | 'VES';
   monto_original: number | string;
@@ -138,6 +169,7 @@ export interface Pago {
   creado_por_nombre?: string | null;
   actualizado_en?: string | null;
   actualizado_por?: number | null;
+  documentos?: PagoDocumento[];
 }
 
 export type EstadoPedido = 'COMPLETADO' | 'ANULADO';

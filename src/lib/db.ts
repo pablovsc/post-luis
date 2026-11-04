@@ -240,6 +240,18 @@ export async function ensureAuthTables(): Promise<void> {
         actualizado_por INT REFERENCES m_usuario(id)
       );
 
+      -- Tabla de Relación Documento - Pago (t_pago_documento)
+      CREATE TABLE IF NOT EXISTS t_pago_documento (
+        id SERIAL PRIMARY KEY,
+        pago_id INT NOT NULL REFERENCES t_pago(id) ON DELETE CASCADE,
+        tipo_documento VARCHAR(20) NOT NULL CHECK (tipo_documento IN ('VENTA', 'COMPRA')),
+        pedido_id INT REFERENCES t_pedido(id) ON DELETE RESTRICT,
+        compra_id INT REFERENCES t_compra(id) ON DELETE RESTRICT,
+        monto_imputado_original NUMERIC(14, 2) NOT NULL CHECK (monto_imputado_original > 0),
+        monto_imputado_usd NUMERIC(14, 2) NOT NULL CHECK (monto_imputado_usd > 0),
+        creado_en TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       ALTER TABLE t_pedido 
       ADD COLUMN IF NOT EXISTS condicion_pago VARCHAR(20) NOT NULL DEFAULT 'CONTADO',
       ADD COLUMN IF NOT EXISTS tipo_pago_id INT REFERENCES m_tipopago(id),

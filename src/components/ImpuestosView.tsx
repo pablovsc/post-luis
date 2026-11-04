@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Impuesto } from '@/types';
+import PosNumberInput from '@/components/PosNumberInput';
 import {
   Percent,
   Plus,
@@ -272,16 +273,12 @@ export default function ImpuestosView({ isDarkMode = false, onRefresh }: Impuest
                 <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
                   Porcentaje (%) *
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  required
-                  placeholder="Ej: 16.00 o 0.00"
+                <PosNumberInput
                   value={formData.porcentaje}
-                  onChange={(e) => setFormData({ ...formData, porcentaje: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
+                  onChange={(val) => setFormData({ ...formData, porcentaje: String(val) })}
+                  decimals={2}
+                  max={100}
+                  className={`w-full px-3 py-2 rounded-xl border text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                     isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                   }`}
                 />

@@ -31,6 +31,8 @@ import TercerosView from '@/components/TercerosView';
 import ImpuestosView from '@/components/ImpuestosView';
 import ReportesView from '@/components/ReportesView';
 import UsuariosView from '@/components/UsuariosView';
+import PagosView from '@/components/PagosView';
+import BancosCuentasView from '@/components/BancosCuentasView';
 import LoginModal from '@/components/LoginModal';
 import DatabaseModal from '@/components/DatabaseModal';
 import QrModal from '@/components/QrModal';
@@ -38,7 +40,7 @@ import MantenimientoModal from '@/components/MantenimientoModal';
 import { Producto, Tasa, DashboardData, Usuario, ModuloPermiso } from '@/types';
 import { UserCheck, LogOut, Shield } from 'lucide-react';
 
-type ActiveTab = 'menu' | 'dashboard' | 'pos' | 'orders' | 'compras' | 'products' | 'terceros' | 'impuestos' | 'rates' | 'reports' | 'users';
+type ActiveTab = 'menu' | 'dashboard' | 'pos' | 'orders' | 'compras' | 'pagos' | 'products' | 'terceros' | 'bancos' | 'impuestos' | 'rates' | 'reports' | 'users';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('menu');
@@ -47,6 +49,7 @@ export default function Home() {
   const [showMantenimientoModal, setShowMantenimientoModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [dbConnected, setDbConnected] = useState(true);
+  const [pagosInitialAction, setPagosInitialAction] = useState<any | null>(null);
   
   // Auth state
   const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
@@ -477,6 +480,10 @@ export default function Home() {
             currentRate={currentRate}
             onOrderCompleted={fetchData}
             onOpenRates={() => setActiveTab('rates')}
+            onNavigatePagos={(actionData) => {
+              setPagosInitialAction(actionData);
+              setActiveTab('pagos');
+            }}
             isDarkMode={isDarkMode}
           />
         )}
@@ -493,7 +500,18 @@ export default function Home() {
             products={products}
             currentRate={currentRate}
             onRefreshProducts={fetchData}
+            onNavigatePagos={(actionData) => {
+              setPagosInitialAction(actionData);
+              setActiveTab('pagos');
+            }}
             isDarkMode={isDarkMode}
+          />
+        )}
+
+        {activeTab === 'pagos' && (
+          <PagosView
+            isDarkMode={isDarkMode}
+            initialAction={pagosInitialAction}
           />
         )}
 
@@ -507,6 +525,10 @@ export default function Home() {
 
         {activeTab === 'terceros' && (
           <TercerosView isDarkMode={isDarkMode} />
+        )}
+
+        {activeTab === 'bancos' && (
+          <BancosCuentasView isDarkMode={isDarkMode} />
         )}
 
         {activeTab === 'impuestos' && (

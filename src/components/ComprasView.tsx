@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Compra, Producto, Tercero, Impuesto, Tasa, EstadoCompra, TipoPago, CondicionPago } from '@/types';
 import { getOpcionesUnidad, formatStockDesglose } from '@/lib/unidades';
+import PosNumberInput from '@/components/PosNumberInput';
 import {
   FileText,
   Plus,
@@ -29,6 +30,7 @@ interface ComprasViewProps {
   products: Producto[];
   currentRate: Tasa | null;
   onRefreshProducts: () => void;
+  onNavigatePagos?: (actionData: any) => void;
   isDarkMode?: boolean;
 }
 
@@ -202,6 +204,7 @@ export default function ComprasView({
   products,
   currentRate,
   onRefreshProducts,
+  onNavigatePagos,
   isDarkMode = false,
 }: ComprasViewProps) {
   const [compras, setCompras] = useState<Compra[]>([]);
@@ -219,6 +222,7 @@ export default function ComprasView({
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showQuickSupplierModal, setShowQuickSupplierModal] = useState(false);
   const [changingStatusId, setChangingStatusId] = useState<number | null>(null);
+  const [completedPurchaseToPay, setCompletedPurchaseToPay] = useState<any | null>(null);
 
   // New Purchase Form State
   const [numeroFactura, setNumeroFactura] = useState('');
@@ -476,9 +480,7 @@ export default function ComprasView({
           observaciones: observaciones.trim() || undefined,
           estado: statusChoice,
           condicion_pago: condicionPago,
-          tipo_pago_id: tipoPagoId ? Number(tipoPagoId) : undefined,
-          referencia_pago: referenciaPago.trim() || undefined,
-          fecha_vencimiento: condicionPago === 'CREDITO' ? fechaVencimiento : undefined,
+          fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : undefined,
           items: lines,
         }),
       });
@@ -489,6 +491,18 @@ export default function ComprasView({
         setShowAddModal(false);
         fetchCompras();
         onRefreshProducts();
+
+        // Preguntar si desea gestionar el pago
+        if (onNavigatePagos) {
+          setCompletedPurchaseToPay({
+            id: data.purchase?.id || (compras[0]?.id ? compras[0].id + 1 : 1),
+            numero_factura: numeroFactura.trim(),
+            tercero_id: Number(terceroId),
+            total_usd: formTotalUsd,
+            total_local: formTotalLocal,
+            condicion_pago: condicionPago,
+          });
+        }
       } else {
         setErrorMsg(data.message || 'Error al procesar la compra');
         setShowStatusDecisionModal(false);
@@ -888,9 +902,9 @@ export default function ComprasView({
             )}
 
             <form onSubmit={handleOpenDecisionModal} className="space-y-5 mt-4">
-              {/* Top Row: Provider, Factura #, Fecha, Estado */}
+              {/* Top Row: Provider, Factura #, Fecha, Término de Pago */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
+                <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                       Proveedor *
@@ -900,7 +914,7 @@ export default function ComprasView({
                       onClick={() => setShowQuickSupplierModal(true)}
                       className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1"
                     >
-                      <UserPlus className="w-3 h-3" /> + Nuevo Proveedor
+                      <UserPlus className="w-3 h-3" /> + Nuevo
                     </button>
                   </div>
                   <select
@@ -950,28 +964,71 @@ export default function ComprasView({
                     }`}
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
+                    Término de Pago
+                  </label>
+                  <select
+                    value={condicionPago}
+                    onChange={(e) => {
+                      const val = e.target.value as CondicionPago;
+                      setCondicionPago(val);
+                      const d = new Date();
+                      if (val === 'CREDITO_7') d.setDate(d.getDate() + 7);
+                      else if (val === 'CREDITO_15') d.setDate(d.getDate() + 15);
+                      else if (val === 'CREDITO_30') d.setDate(d.getDate() + 30);
+                      else if (val === 'CREDITO_45') d.setDate(d.getDate() + 45);
+                      else d.setDate(d.getDate() + 30);
+                      setFechaVencimiento(d.toISOString().split('T')[0]);
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm font-bold cursor-pointer ${
+                      condicionPago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'
+                    } ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
+                  >
+                    <option value="CONTADO">CONTADO</option>
+                    <option value="CREDITO_7">CRÉDITO 7 DÍAS</option>
+                    <option value="CREDITO_15">CRÉDITO 15 DÍAS</option>
+                    <option value="CREDITO_30">CRÉDITO 30 DÍAS</option>
+                    <option value="CREDITO_45">CRÉDITO 45 DÍAS</option>
+                    <option value="CREDITO">CRÉDITO ABIERTO</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Tasa & Observaciones row */}
+              {/* Tasa, Vencimiento (si es crédito) & Observaciones row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
                     Tasa de Cambio Aplicada
                   </label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    min="0.0001"
-                    required
+                  <PosNumberInput
                     value={tasaCambio}
-                    onChange={(e) => setTasaCambio(Number(e.target.value))}
+                    onChange={(val) => setTasaCambio(val)}
+                    decimals={4}
                     className={`w-full px-3 py-2 rounded-xl border text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
                   />
                 </div>
 
-                <div className="sm:col-span-2">
+                {condicionPago !== 'CONTADO' ? (
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-amber-500">
+                      Fecha Vencimiento Crédito *
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaVencimiento}
+                      onChange={(e) => setFechaVencimiento(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl border text-sm font-mono text-amber-500 ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    />
+                  </div>
+                ) : null}
+
+                <div className={condicionPago !== 'CONTADO' ? '' : 'sm:col-span-2'}>
                   <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
                     Observaciones / Notas (Opcional)
                   </label>
@@ -984,99 +1041,6 @@ export default function ComprasView({
                       isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
                   />
-                </div>
-              </div>
-
-              {/* Fila: Términos y Métodos de Pago */}
-              <div className={`p-4 rounded-xl border space-y-3 ${isDarkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Condición y Forma de Pago
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
-                      Término de Pago
-                    </label>
-                    <select
-                      value={condicionPago}
-                      onChange={(e) => {
-                        const val = e.target.value as CondicionPago;
-                        setCondicionPago(val);
-                        const d = new Date();
-                        if (val === 'CREDITO_7') d.setDate(d.getDate() + 7);
-                        else if (val === 'CREDITO_15') d.setDate(d.getDate() + 15);
-                        else if (val === 'CREDITO_30') d.setDate(d.getDate() + 30);
-                        else if (val === 'CREDITO_45') d.setDate(d.getDate() + 45);
-                        else d.setDate(d.getDate() + 30);
-                        setFechaVencimiento(d.toISOString().split('T')[0]);
-                      }}
-                      className={`w-full px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
-                        condicionPago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'
-                      } ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'}`}
-                    >
-                      <option value="CONTADO">CONTADO</option>
-                      <option value="CREDITO_7">CRÉDITO 7 DÍAS</option>
-                      <option value="CREDITO_15">CRÉDITO 15 DÍAS</option>
-                      <option value="CREDITO_30">CRÉDITO 30 DÍAS</option>
-                      <option value="CREDITO_45">CRÉDITO 45 DÍAS</option>
-                      <option value="CREDITO">CRÉDITO ABIERTO</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
-                      Método de Pago
-                    </label>
-                    <select
-                      value={tipoPagoId}
-                      onChange={(e) => setTipoPagoId(e.target.value ? Number(e.target.value) : '')}
-                      className={`w-full px-3 py-2 rounded-xl border text-xs cursor-pointer ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    >
-                      <option value="">-- Sin especificar --</option>
-                      {tiposPago.map((tp) => (
-                        <option key={tp.id} value={tp.id}>
-                          {tp.nombre} ({tp.moneda})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
-                      Referencia de Pago (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Ref Bancaria o Comprobante"
-                      value={referenciaPago}
-                      onChange={(e) => setReferenciaPago(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-xl border text-xs font-mono ${
-                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    />
-                  </div>
-
-                  {condicionPago !== 'CONTADO' ? (
-                    <div>
-                      <label className="block text-xs font-semibold mb-1 text-amber-500">
-                        Vencimiento Crédito *
-                      </label>
-                      <input
-                        type="date"
-                        value={fechaVencimiento}
-                        onChange={(e) => setFechaVencimiento(e.target.value)}
-                        className={`w-full px-3 py-2 rounded-xl border text-xs font-mono text-amber-500 ${
-                          isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
-                        }`}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center text-xs text-slate-400 italic py-2">
-                      Pago al contado inmediato
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1249,24 +1213,20 @@ export default function ComprasView({
                                 )}
                               </td>
                               <td className="py-2 px-3">
-                                <input
-                                  type="number"
-                                  min="0.01"
-                                  step="any"
+                                <PosNumberInput
                                   value={line.cantidad}
-                                  onChange={(e) => handleUpdateLine(idx, 'cantidad', Number(e.target.value))}
+                                  onChange={(val) => handleUpdateLine(idx, 'cantidad', val)}
+                                  decimals={2}
                                   className={`w-full px-2 py-1.5 rounded-lg border text-xs font-mono font-bold ${
                                     isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
                                   }`}
                                 />
                               </td>
                               <td className="py-2 px-3">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                <PosNumberInput
                                   value={line.costo_unitario_usd}
-                                  onChange={(e) => handleUpdateLine(idx, 'costo_unitario_usd', Number(e.target.value))}
+                                  onChange={(val) => handleUpdateLine(idx, 'costo_unitario_usd', val)}
+                                  decimals={2}
                                   className={`w-full px-2 py-1.5 rounded-lg border text-xs font-mono font-bold ${
                                     isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
                                   }`}
@@ -1751,6 +1711,73 @@ export default function ComprasView({
                     <Ban className="w-3.5 h-3.5" /> Sí, Anular y Restar Cantidades
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pregunta Gestionar Pago */}
+      {completedPurchaseToPay && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl transition-all ${
+            isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-500 mb-3 border border-indigo-500/20">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-black">
+                ¡Compra Registrada con Éxito!
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Factura <span className="font-mono font-bold text-slate-800 dark:text-slate-200">#{completedPurchaseToPay.numero_factura}</span> por un total de{' '}
+                <strong className="text-emerald-500 font-mono">${completedPurchaseToPay.total_usd.toFixed(2)} USD</strong>
+              </p>
+            </div>
+
+            <div className={`p-4 rounded-xl border text-xs space-y-2 mb-5 ${
+              isDarkMode ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Condición:</span>
+                <span className="font-bold text-amber-500">{completedPurchaseToPay.condicion_pago}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Total en Bs.:</span>
+                <span className="font-mono font-semibold">Bs. {completedPurchaseToPay.total_local.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200 dark:border-slate-800">
+                ¿Deseas gestionar el egreso o comprobante de pago a este proveedor ahora mismo en Tesorería?
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCompletedPurchaseToPay(null)}
+                className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                No, más tarde
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const comp = completedPurchaseToPay;
+                  setCompletedPurchaseToPay(null);
+                  if (onNavigatePagos) {
+                    onNavigatePagos({
+                      tipo_operacion: 'PAGO_COMPRA',
+                      compra_id: comp.id,
+                      tercero_id: comp.tercero_id,
+                      monto_original: comp.total_usd,
+                      moneda: 'USD',
+                    });
+                  }
+                }}
+                className="flex-1 py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20 flex items-center justify-center gap-1.5"
+              >
+                <DollarSign className="w-4 h-4" /> Sí, Gestionar Pago
               </button>
             </div>
           </div>

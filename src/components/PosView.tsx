@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Producto, Tasa, Tercero, Presentacion, TipoPago, CondicionPago, CuentaBancaria } from '@/types';
 import { getOpcionesUnidad, getOpcionUnidad, formatStockDesglose } from '@/lib/unidades';
+import PosNumberInput from '@/components/PosNumberInput';
 import {
   ShoppingCart,
   Plus,
@@ -38,6 +39,7 @@ interface PosViewProps {
   currentRate: Tasa | null;
   onOrderCompleted: () => void;
   onOpenRates: () => void;
+  onNavigatePagos?: (actionData: any) => void;
   isDarkMode?: boolean;
 }
 
@@ -46,6 +48,7 @@ export default function PosView({
   currentRate,
   onOrderCompleted,
   onOpenRates,
+  onNavigatePagos,
   isDarkMode = false,
 }: PosViewProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -81,13 +84,23 @@ export default function PosView({
   const [registrarPago, setRegistrarPago] = useState<boolean>(true);
   const [selectedTipoPagoId, setSelectedTipoPagoId] = useState<number | null>(null);
   const [referenciaPago, setReferenciaPago] = useState('');
+  const [montoAbono, setMontoAbono] = useState<string>('');
   const [fechaVencimiento, setFechaVencimiento] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 15);
     return d.toISOString().split('T')[0];
   });
 
-  const rateValue = currentRate ? Number(currentRate.tasa) : 0;
+  // Filtrar cuentas o cajas según el tipo de pago seleccionado en el POS
+  const posSelectedTp = tiposPago.find((t) => t.id === selectedTipoPagoId);
+  const posIsEfectivo = posSelectedTp?.codigo?.startsWith('EFECTIVO');
+  const posTargetMoneda = posSelectedTp ? posSelectedTp.moneda : 'USD';
+
+  const posCuentasCompatibles = cuentasBancarias.filter((cb) => {
+    const matchTipo = posIsEfectivo ? cb.banco_tipo === 'CAJA' : cb.banco_tipo === 'BANCO';
+    const matchMoneda = cb.moneda === posTargetMoneda;
+    return matchTipo && matchMoneda;
+  });
 
   // Cambiar condición de pago y auto-ajustar fecha de vencimiento según los días
   const handleSelectCondicionPago = (cond: CondicionPago) => {
@@ -364,6 +377,7 @@ export default function PosView({
     }
 
     setCheckoutError(null);
+    setMontoAbono('');
     setShowCheckoutModal(true);
   };
 
@@ -404,6 +418,7 @@ export default function PosView({
           fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : undefined,
           cuenta_bancaria_id: registrarPago ? selectedCuentaBancariaId : null,
           registrar_pago: registrarPago,
+          monto_pago: registrarPago && montoAbono && parseFloat(montoAbono) > 0 ? parseFloat(montoAbono) : null,
           items: itemsPayload,
         }),
       });
@@ -1095,7 +1110,7 @@ export default function PosView({
       {/* Modal de Cobro: Confirmación previa (evita errores de dedo) y Recibo final */}
       {(showCheckoutModal || lastCompletedOrder) && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in"
           onClick={() => {
             if (!loading) {
               setShowCheckoutModal(false);
@@ -1106,7 +1121,7 @@ export default function PosView({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`border rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            className={`border rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
               }`}
           >
             {lastCompletedOrder ? (
@@ -1226,17 +1241,19 @@ export default function PosView({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLastCompletedOrder(null);
-                    setShowCheckoutModal(false);
-                    setCheckoutError(null);
-                  }}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-md shadow-indigo-600/20 cursor-pointer"
-                >
-                  Cerrar y Continuar
-                </button>
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLastCompletedOrder(null);
+                      setShowCheckoutModal(false);
+                      setCheckoutError(null);
+                    }}
+                    className="w-full py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Cerrar Comprobante
+                  </button>
+                </div>
               </>
             ) : (
               /* FASE 1: Confirmación de Cobro (Evita errores de dedo) */
@@ -1414,6 +1431,32 @@ export default function PosView({
                   {/* Campos de Pago (obligatorios en contado, opcionales en crédito) */}
                   {registrarPago && (
                     <div className="space-y-2.5 pt-1">
+                      {/* En caso de venta a crédito o abono, permitir especificar el monto del abono */}
+                      {condicionPago !== 'CONTADO' && (
+                        <div className="p-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
+                              Monto del Abono Inicial ({tiposPago.find((t) => t.id === selectedTipoPagoId)?.moneda || 'USD'})
+                            </label>
+                            <span className="text-[10px] text-slate-400">
+                              Total Venta: {tiposPago.find((t) => t.id === selectedTipoPagoId)?.moneda === 'VES' ? `${totalLocal.toFixed(2)} Bs.` : `$${totalUsd.toFixed(2)}`}
+                            </span>
+                          </div>
+                          <PosNumberInput
+                            value={montoAbono}
+                            onChange={(val) => setMontoAbono(String(val))}
+                            decimals={2}
+                            placeholder="0,00"
+                            className={`w-full px-3 py-1.5 rounded-xl border font-mono font-bold text-sm ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          />
+                          <p className="text-[10px] text-slate-400">
+                            Si se deja en 0,00 se asumirá el pago completo de la venta.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -1421,7 +1464,20 @@ export default function PosView({
                           </label>
                           <select
                             value={selectedTipoPagoId ?? ''}
-                            onChange={(e) => setSelectedTipoPagoId(e.target.value ? Number(e.target.value) : null)}
+                            onChange={(e) => {
+                              const id = e.target.value ? Number(e.target.value) : null;
+                              setSelectedTipoPagoId(id);
+                              if (id) {
+                                const tp = tiposPago.find((t) => t.id === id);
+                                if (tp) {
+                                  const isEf = tp.codigo?.startsWith('EFECTIVO');
+                                  const comp = cuentasBancarias.find(
+                                    (cb) => (isEf ? cb.banco_tipo === 'CAJA' : cb.banco_tipo === 'BANCO') && cb.moneda === tp.moneda
+                                  );
+                                  setSelectedCuentaBancariaId(comp ? comp.id : null);
+                                }
+                              }
+                            }}
                             className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer ${
                               isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                             }`}
@@ -1436,7 +1492,7 @@ export default function PosView({
 
                         <div>
                           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                            Destino (Caja / Cuenta Receptora)
+                            {posIsEfectivo ? 'Caja de Efectivo Destino' : 'Cuenta Bancaria Destino'}
                           </label>
                           <select
                             value={selectedCuentaBancariaId ?? ''}
@@ -1445,11 +1501,17 @@ export default function PosView({
                               isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                             }`}
                           >
-                            {cuentasBancarias.map((cb) => (
-                              <option key={cb.id} value={cb.id}>
-                                [{cb.banco_tipo}] {cb.nombre} ({cb.moneda})
+                            {posCuentasCompatibles.length === 0 ? (
+                              <option value="">
+                                -- Sin {posIsEfectivo ? 'caja' : 'cuenta'} en {posTargetMoneda} --
                               </option>
-                            ))}
+                            ) : (
+                              posCuentasCompatibles.map((cb) => (
+                                <option key={cb.id} value={cb.id}>
+                                  [{cb.banco_tipo}] {cb.nombre} ({cb.moneda})
+                                </option>
+                              ))
+                            )}
                           </select>
                         </div>
                       </div>

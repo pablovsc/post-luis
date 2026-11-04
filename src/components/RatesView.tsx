@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Tasa } from '@/types';
 import { TrendingUp, Calendar, CheckCircle2, History, AlertCircle, Loader2, RefreshCw, Globe } from 'lucide-react';
+import PosNumberInput from '@/components/PosNumberInput';
 
 interface RatesViewProps {
   currentRate: Tasa | null;
@@ -213,14 +214,10 @@ export default function RatesView({ currentRate, historyRates, onRefresh, isDark
                 }`}>
                   Valor de Tasa *
                 </label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  required
-                  placeholder="0.0000"
+                <PosNumberInput
                   value={tasaValor}
-                  onChange={(e) => setTasaValor(e.target.value)}
+                  onChange={(val) => setTasaValor(String(val))}
+                  decimals={4}
                   className={`w-full rounded-xl px-3.5 py-2.5 text-sm font-mono border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                     isDarkMode
                       ? 'bg-slate-800/80 border-slate-700 text-white'

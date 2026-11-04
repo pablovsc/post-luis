@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Producto, Impuesto, Presentacion } from '@/types';
 import { formatStockDesglose, formatStockDesgloseCompleto, getOpcionesUnidad, getSegmentacionExistencias } from '@/lib/unidades';
+import PosNumberInput from '@/components/PosNumberInput';
 import {
   Package,
   Plus,
@@ -477,14 +478,10 @@ export default function ProductsView({ products, onRefresh, isDarkMode = false }
                   </label>
                   <div className="relative">
                     <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      required
-                      placeholder="0.00"
+                    <PosNumberInput
                       value={formData.precio_usd}
-                      onChange={(e) => setFormData({ ...formData, precio_usd: e.target.value })}
+                      onChange={(val) => setFormData({ ...formData, precio_usd: String(val) })}
+                      decimals={2}
                       className={`w-full pl-9 pr-3 py-2 rounded-xl border text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                       }`}
@@ -563,14 +560,11 @@ export default function ProductsView({ products, onRefresh, isDarkMode = false }
                         </div>
 
                         <div className="col-span-3">
-                          <input
-                            type="number"
-                            min="2"
-                            step="any"
-                            required
-                            placeholder="Ej: 20"
+                          <PosNumberInput
                             value={pr.factor}
-                            onChange={(e) => handleUpdatePresentationRow(index, 'factor', e.target.value)}
+                            onChange={(val) => handleUpdatePresentationRow(index, 'factor', String(val))}
+                            decimals={2}
+                            min={1}
                             className={`w-full px-3 py-1.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                               isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
                             }`}
@@ -579,14 +573,10 @@ export default function ProductsView({ products, onRefresh, isDarkMode = false }
 
                         <div className="col-span-4 relative">
                           <DollarSign className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            required
-                            placeholder="0.00"
+                          <PosNumberInput
                             value={pr.precio_usd}
-                            onChange={(e) => handleUpdatePresentationRow(index, 'precio_usd', e.target.value)}
+                            onChange={(val) => handleUpdatePresentationRow(index, 'precio_usd', String(val))}
+                            decimals={2}
                             className={`w-full pl-7 pr-3 py-1.5 rounded-xl border text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                               isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
                             }`}
@@ -615,11 +605,10 @@ export default function ProductsView({ products, onRefresh, isDarkMode = false }
                   <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
                     Stock Actual ({formData.unidad_base || 'Unidades'} base)
                   </label>
-                  <input
-                    type="number"
-                    step="any"
+                  <PosNumberInput
                     value={formData.stock_actual}
-                    onChange={(e) => setFormData({ ...formData, stock_actual: e.target.value })}
+                    onChange={(val) => setFormData({ ...formData, stock_actual: String(val) })}
+                    decimals={2}
                     className={`w-full px-3 py-2 rounded-xl border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                       isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
@@ -635,12 +624,10 @@ export default function ProductsView({ products, onRefresh, isDarkMode = false }
                   </label>
                   <div className="relative">
                     <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="number"
-                      step="0.0001"
-                      min="0"
+                    <PosNumberInput
                       value={formData.costo_promedio_usd}
-                      onChange={(e) => setFormData({ ...formData, costo_promedio_usd: e.target.value })}
+                      onChange={(val) => setFormData({ ...formData, costo_promedio_usd: String(val) })}
+                      decimals={4}
                       className={`w-full pl-9 pr-3 py-2 rounded-xl border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                         isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                       }`}
