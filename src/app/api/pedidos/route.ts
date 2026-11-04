@@ -27,9 +27,16 @@ export async function GET(req: Request) {
                 p.tasa_cambio_aplicada,
                 COALESCE(p.base_imponible_usd, p.total_usd)::numeric as base_imponible_usd,
                 COALESCE(p.monto_impuesto_usd, 0)::numeric as monto_impuesto_usd,
-                p.total_usd, p.total_moneda_local
+                p.total_usd, p.total_moneda_local,
+                COALESCE(p.condicion_pago, 'CONTADO') as condicion_pago,
+                p.tipo_pago_id,
+                tp.nombre as tipo_pago_nombre,
+                tp.moneda as tipo_pago_moneda,
+                p.referencia_pago,
+                TO_CHAR(p.fecha_vencimiento, 'YYYY-MM-DD') as fecha_vencimiento
          FROM t_pedido p
          LEFT JOIN m_tercero t ON t.id = p.tercero_id
+         LEFT JOIN m_tipopago tp ON tp.id = p.tipo_pago_id
          WHERE p.id = $1`,
         [Number(orderId)]
       );
@@ -74,11 +81,18 @@ export async function GET(req: Request) {
               COALESCE(p.base_imponible_usd, p.total_usd)::numeric as base_imponible_usd,
               COALESCE(p.monto_impuesto_usd, 0)::numeric as monto_impuesto_usd,
               p.total_usd, p.total_moneda_local,
+              COALESCE(p.condicion_pago, 'CONTADO') as condicion_pago,
+              p.tipo_pago_id,
+              tp.nombre as tipo_pago_nombre,
+              tp.moneda as tipo_pago_moneda,
+              p.referencia_pago,
+              TO_CHAR(p.fecha_vencimiento, 'YYYY-MM-DD') as fecha_vencimiento,
               COUNT(l.id)::int as total_articulos
        FROM t_pedido p
        LEFT JOIN m_tercero t ON t.id = p.tercero_id
+       LEFT JOIN m_tipopago tp ON tp.id = p.tipo_pago_id
        LEFT JOIN t_pedidolinea l ON l.pedido_id = p.id
-       GROUP BY p.id, p.estado, t.razon_social_nombre, t.identificacion, t.telefono
+       GROUP BY p.id, p.estado, t.razon_social_nombre, t.identificacion, t.telefono, tp.nombre, tp.moneda
        ORDER BY p.fecha_hora DESC
        LIMIT $1`,
       [limit]
@@ -104,7 +118,15 @@ export async function POST(req: Request) {
       tercero_id,
       cliente_nombre,
       tasa_cambio_aplicada,
+      condicion_pago = 'CONTADO',
+      tipo_pago_id = 1,
+      referencia_pago = null,
+      fecha_vencimiento = null,
       permitir_stock_negativo = false,
+      cuenta_bancaria_id = null,
+      registrar_pago = true,
+      monto_pago = null,
+      usuario_id = null,
       items,
     } = body;
 
@@ -254,9 +276,10 @@ export async function POST(req: Request) {
     const insertPedidoSql = `
       INSERT INTO t_pedido (
         tercero_id, cliente_nombre, tasa_cambio_aplicada,
-        base_imponible_usd, monto_impuesto_usd, total_usd, total_moneda_local, estado
+        base_imponible_usd, monto_impuesto_usd, total_usd, total_moneda_local,
+        condicion_pago, tipo_pago_id, referencia_pago, fecha_vencimiento, estado
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'COMPLETADO')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'COMPLETADO')
       RETURNING *;
     `;
 
@@ -268,9 +291,71 @@ export async function POST(req: Request) {
       calculatedTaxUsd,
       totalUsd,
       totalLocal,
+      condicion_pago,
+      tipo_pago_id ? Number(tipo_pago_id) : 1,
+      referencia_pago ? String(referencia_pago).trim() : null,
+      fecha_vencimiento ? String(fecha_vencimiento).trim() : null,
     ]);
 
     const nuevoPedido = pedidoRes.rows[0];
+
+    // Si registrar_pago es true (o no es crédito sin abono inicial), crear registro en t_pago y t_pago_documento
+    if ((registrar_pago && condicion_pago === 'CONTADO') || (registrar_pago && Number(monto_pago) > 0)) {
+      // Obtener moneda del tipo de pago seleccionado
+      const tpRes = await client.query('SELECT moneda FROM m_tipopago WHERE id = $1', [Number(tipo_pago_id || 1)]);
+      const tpMoneda = tpRes.rows.length > 0 ? tpRes.rows[0].moneda : 'USD';
+      
+      const pagoOriginal = Number(monto_pago) > 0 
+        ? Number(monto_pago)
+        : tpMoneda === 'VES' ? totalLocal : totalUsd;
+      
+      const pagoEquivUsd = tpMoneda === 'VES'
+        ? Number((pagoOriginal / rate).toFixed(2))
+        : pagoOriginal;
+
+      const tipoOperacion = condicion_pago === 'CONTADO' ? 'COBRO_VENTA' : 'ABONO_VENTA';
+
+      const pagoRes = await client.query(
+        `INSERT INTO t_pago (
+          tipo_operacion, pedido_id, tercero_id, tipo_pago_id, cuenta_bancaria_id,
+          moneda, monto_original, tasa_cambio, monto_equivalente_usd,
+          referencia, estado, creado_por
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'APROBADO', $11)
+        RETURNING id`,
+        [
+          tipoOperacion,
+          nuevoPedido.id,
+          assignedTerceroId,
+          Number(tipo_pago_id || 1),
+          cuenta_bancaria_id ? Number(cuenta_bancaria_id) : null,
+          tpMoneda,
+          pagoOriginal,
+          rate,
+          pagoEquivUsd,
+          referencia_pago ? String(referencia_pago).trim() : null,
+          usuario_id ? Number(usuario_id) : null,
+        ]
+      );
+
+      const nuevoPagoId = pagoRes.rows[0].id;
+
+      // Imputar pago a la factura/pedido creado en t_pago_documento
+      await client.query(
+        `INSERT INTO t_pago_documento (
+          pago_id, tipo_documento, pedido_id,
+          monto_imputado_original, monto_imputado_usd
+        ) VALUES ($1, 'VENTA', $2, $3, $4)`,
+        [nuevoPagoId, nuevoPedido.id, pagoOriginal, pagoEquivUsd]
+      );
+
+      // Actualizar saldo de cuenta/caja receptora si fue seleccionada
+      if (cuenta_bancaria_id) {
+        await client.query(
+          'UPDATE m_cuentabancaria SET saldo_actual = saldo_actual + $1 WHERE id = $2',
+          [pagoOriginal, Number(cuenta_bancaria_id)]
+        );
+      }
+    }
 
     // 4. Insert t_pedidolinea
     for (const line of validatedLines) {

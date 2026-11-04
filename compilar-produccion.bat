@@ -26,11 +26,11 @@ if not exist "node_modules\" (
 set NEXT_TELEMETRY_DISABLED=1
 set NEXT_DISABLE_UPGRADE_CHECK=1
 
-echo [INFO] Ejecutando compilacion optimizada (next build)...
+echo [INFO] Ejecutando compilacion optimizada (npm run build)...
 echo Esto puede tardar 1 o 2 minutos. Por favor espera...
 echo.
 
-call npx --no-install next build
+call npm run build
 
 if %errorlevel% equ 0 (
     echo.

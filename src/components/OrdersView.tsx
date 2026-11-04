@@ -299,6 +299,7 @@ export default function OrdersView({ isDarkMode = false, onRefreshProducts }: Or
                 <th className="py-3.5 px-5">ID Pedido</th>
                 <th className="py-3.5 px-5">Fecha y Hora</th>
                 <th className="py-3.5 px-5">Cliente</th>
+                <th className="py-3.5 px-4 text-center">Condición</th>
                 <th className="py-3.5 px-4 text-center">Estado</th>
                 <th className="py-3.5 px-4 text-center">Artículos</th>
                 <th className="py-3.5 px-5 text-right">Tasa Aplicada</th>
@@ -314,14 +315,14 @@ export default function OrdersView({ isDarkMode = false, onRefreshProducts }: Or
             }`}>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-indigo-500 opacity-60" />
                     Cargando historial de pedidos...
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     <Receipt className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     No se encontraron pedidos con los filtros aplicados.
                   </td>
@@ -385,6 +386,24 @@ export default function OrdersView({ isDarkMode = false, onRefreshProducts }: Or
                           {o.tercero_identificacion && (
                             <span className="font-mono text-[10px] text-slate-400 pl-5">
                               {o.tercero_identificacion}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Condición de Pago Badge */}
+                      <td className="py-4 px-4 text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            o.condicion_pago !== 'CONTADO'
+                              ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                              : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                          }`}>
+                            {o.condicion_pago || 'CONTADO'}
+                          </span>
+                          {o.tipo_pago_nombre && (
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {o.tipo_pago_nombre}
                             </span>
                           )}
                         </div>
@@ -734,6 +753,33 @@ export default function OrdersView({ isDarkMode = false, onRefreshProducts }: Or
                   <span className={`font-mono font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {selectedOrder.lineas?.reduce((acc, l) => acc + Number(l.cantidad), 0) || 0} unidades
                   </span>
+                </div>
+                <div className="col-span-2 border-t pt-2 mt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Condición de Pago:</span>
+                      <span className={`font-bold ${selectedOrder.condicion_pago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {selectedOrder.condicion_pago || 'CONTADO'}
+                      </span>
+                      {selectedOrder.tipo_pago_nombre && (
+                        <span className="text-slate-400 text-xs ml-1.5 font-medium">
+                          ({selectedOrder.tipo_pago_nombre})
+                        </span>
+                      )}
+                    </div>
+                    {selectedOrder.referencia_pago && (
+                      <div className="text-right">
+                        <span className="text-slate-400 block text-[11px]">Referencia:</span>
+                        <span className="font-mono text-xs font-semibold">{selectedOrder.referencia_pago}</span>
+                      </div>
+                    )}
+                    {selectedOrder.condicion_pago !== 'CONTADO' && selectedOrder.fecha_vencimiento && (
+                      <div className="text-right">
+                        <span className="text-amber-500 block text-[11px] font-semibold">Vencimiento:</span>
+                        <span className="font-mono text-xs font-bold text-amber-500">{selectedOrder.fecha_vencimiento}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Producto, Tasa, Tercero, Presentacion } from '@/types';
+import { Producto, Tasa, Tercero, Presentacion, TipoPago, CondicionPago, CuentaBancaria } from '@/types';
 import { getOpcionesUnidad, getOpcionUnidad, formatStockDesglose } from '@/lib/unidades';
+import PosNumberInput from '@/components/PosNumberInput';
 import {
   ShoppingCart,
   Plus,
@@ -38,6 +39,7 @@ interface PosViewProps {
   currentRate: Tasa | null;
   onOrderCompleted: () => void;
   onOpenRates: () => void;
+  onNavigatePagos?: (actionData: any) => void;
   isDarkMode?: boolean;
 }
 
@@ -46,6 +48,7 @@ export default function PosView({
   currentRate,
   onOrderCompleted,
   onOpenRates,
+  onNavigatePagos,
   isDarkMode = false,
 }: PosViewProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -73,7 +76,79 @@ export default function PosView({
     email: '',
   });
 
-  const rateValue = currentRate ? Number(currentRate.tasa) : 0;
+  // Tipos y Términos de Pago
+  const [tiposPago, setTiposPago] = useState<TipoPago[]>([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
+  const [selectedCuentaBancariaId, setSelectedCuentaBancariaId] = useState<number | null>(null);
+  const [condicionPago, setCondicionPago] = useState<CondicionPago>('CONTADO');
+  const [registrarPago, setRegistrarPago] = useState<boolean>(true);
+  const [selectedTipoPagoId, setSelectedTipoPagoId] = useState<number | null>(null);
+  const [referenciaPago, setReferenciaPago] = useState('');
+  const [montoAbono, setMontoAbono] = useState<string>('');
+  const [fechaVencimiento, setFechaVencimiento] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().split('T')[0];
+  });
+
+  // Filtrar cuentas o cajas según el tipo de pago seleccionado en el POS
+  const posSelectedTp = tiposPago.find((t) => t.id === selectedTipoPagoId);
+  const posIsEfectivo = posSelectedTp?.codigo?.startsWith('EFECTIVO');
+  const posTargetMoneda = posSelectedTp ? posSelectedTp.moneda : 'USD';
+
+  const posCuentasCompatibles = cuentasBancarias.filter((cb) => {
+    const matchTipo = posIsEfectivo ? cb.banco_tipo === 'CAJA' : cb.banco_tipo === 'BANCO';
+    const matchMoneda = cb.moneda === posTargetMoneda;
+    return matchTipo && matchMoneda;
+  });
+
+  // Cambiar condición de pago y auto-ajustar fecha de vencimiento según los días
+  const handleSelectCondicionPago = (cond: CondicionPago) => {
+    setCondicionPago(cond);
+    if (cond === 'CONTADO') {
+      setRegistrarPago(true);
+    } else {
+      // Si es crédito, por defecto no es obligatorio registrar el cobro en el acto
+      setRegistrarPago(false);
+      const d = new Date();
+      if (cond === 'CREDITO_7') d.setDate(d.getDate() + 7);
+      else if (cond === 'CREDITO_15') d.setDate(d.getDate() + 15);
+      else if (cond === 'CREDITO_30') d.setDate(d.getDate() + 30);
+      else if (cond === 'CREDITO_45') d.setDate(d.getDate() + 45);
+      else d.setDate(d.getDate() + 15); // CREDITO general
+      setFechaVencimiento(d.toISOString().split('T')[0]);
+    }
+  };
+
+  // Load payment methods and bank accounts / cash drawers
+  const loadTiposPagoYCuentas = async () => {
+    try {
+      const [tpRes, cbRes] = await Promise.all([
+        fetch('/api/tipos-pago'),
+        fetch('/api/cuentas-bancarias'),
+      ]);
+      const tpData = await tpRes.json();
+      const cbData = await cbRes.json();
+      if (tpData.success && Array.isArray(tpData.tiposPago)) {
+        setTiposPago(tpData.tiposPago);
+        if (tpData.tiposPago.length > 0 && !selectedTipoPagoId) {
+          setSelectedTipoPagoId(tpData.tiposPago[0].id);
+        }
+      }
+      if (cbData.success && Array.isArray(cbData.cuentas)) {
+        setCuentasBancarias(cbData.cuentas);
+        if (cbData.cuentas.length > 0 && !selectedCuentaBancariaId) {
+          setSelectedCuentaBancariaId(cbData.cuentas[0].id);
+        }
+      }
+    } catch (e) {
+      console.error('Error cargando tipos de pago o cuentas bancarias:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadTiposPagoYCuentas();
+  }, []);
 
   // Load clients
   const loadClients = async () => {
@@ -302,6 +377,7 @@ export default function PosView({
     }
 
     setCheckoutError(null);
+    setMontoAbono('');
     setShowCheckoutModal(true);
   };
 
@@ -336,6 +412,13 @@ export default function PosView({
           cliente_nombre: selectedClient?.razon_social_nombre || 'Cliente Genérico',
           tasa_cambio_aplicada: rateValue,
           permitir_stock_negativo: permitirStockNegativo,
+          condicion_pago: condicionPago,
+          tipo_pago_id: registrarPago ? selectedTipoPagoId : null,
+          referencia_pago: registrarPago && referenciaPago.trim() ? referenciaPago.trim() : undefined,
+          fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : undefined,
+          cuenta_bancaria_id: registrarPago ? selectedCuentaBancariaId : null,
+          registrar_pago: registrarPago,
+          monto_pago: registrarPago && montoAbono && parseFloat(montoAbono) > 0 ? parseFloat(montoAbono) : null,
           items: itemsPayload,
         }),
       });
@@ -345,6 +428,10 @@ export default function PosView({
       if (data.success) {
         setLastCompletedOrder({
           ...data.order,
+          condicion_pago: condicionPago,
+          tipo_pago_nombre: registrarPago ? (tiposPago.find(t => t.id === selectedTipoPagoId)?.nombre || null) : 'Crédito Pendiente',
+          referencia_pago: registrarPago && referenciaPago.trim() ? referenciaPago.trim() : null,
+          fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : null,
           cliente_nombre: selectedClient?.razon_social_nombre || 'Cliente Genérico',
           cliente_identificacion: selectedClient?.identificacion || 'V-00000000',
           lineas: cart.map((c) => {
@@ -1023,7 +1110,7 @@ export default function PosView({
       {/* Modal de Cobro: Confirmación previa (evita errores de dedo) y Recibo final */}
       {(showCheckoutModal || lastCompletedOrder) && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in"
           onClick={() => {
             if (!loading) {
               setShowCheckoutModal(false);
@@ -1034,7 +1121,7 @@ export default function PosView({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`border rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4 ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            className={`border rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
               }`}
           >
             {lastCompletedOrder ? (
@@ -1124,19 +1211,49 @@ export default function PosView({
                       Bs.
                     </span>
                   </div>
+
+                  {/* Detalle de Pago */}
+                  <div className={`border-t pt-2 space-y-1 text-[11px] ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Término de Venta:</span>
+                      <span className={`font-bold ${lastCompletedOrder.condicion_pago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {lastCompletedOrder.condicion_pago || 'CONTADO'}
+                      </span>
+                    </div>
+                    {lastCompletedOrder.tipo_pago_nombre && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Forma de Cobro:</span>
+                        <span className="font-medium">{lastCompletedOrder.tipo_pago_nombre}</span>
+                      </div>
+                    )}
+                    {lastCompletedOrder.referencia_pago && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Referencia:</span>
+                        <span className="font-mono">{lastCompletedOrder.referencia_pago}</span>
+                      </div>
+                    )}
+                    {lastCompletedOrder.condicion_pago !== 'CONTADO' && lastCompletedOrder.fecha_vencimiento && (
+                      <div className="flex justify-between text-amber-500">
+                        <span>Fecha Vencimiento:</span>
+                        <span className="font-mono font-semibold">{lastCompletedOrder.fecha_vencimiento}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLastCompletedOrder(null);
-                    setShowCheckoutModal(false);
-                    setCheckoutError(null);
-                  }}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-md shadow-indigo-600/20 cursor-pointer"
-                >
-                  Cerrar y Continuar
-                </button>
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLastCompletedOrder(null);
+                      setShowCheckoutModal(false);
+                      setCheckoutError(null);
+                    }}
+                    className="w-full py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Cerrar Comprobante
+                  </button>
+                </div>
               </>
             ) : (
               /* FASE 1: Confirmación de Cobro (Evita errores de dedo) */
@@ -1242,6 +1359,187 @@ export default function PosView({
                       Bs.
                     </span>
                   </div>
+                </div>
+
+                {/* Selección de Término y Tipo de Pago */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Término de Venta
+                    </label>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                      {[
+                        { id: 'CONTADO', label: 'Contado' },
+                        { id: 'CREDITO_7', label: '7 Días' },
+                        { id: 'CREDITO_15', label: '15 Días' },
+                        { id: 'CREDITO_30', label: '30 Días' },
+                        { id: 'CREDITO_45', label: '45 Días' },
+                        { id: 'CREDITO', label: 'Crédito' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleSelectCondicionPago(item.id as CondicionPago)}
+                          className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center border cursor-pointer ${
+                            condicionPago === item.id
+                              ? item.id === 'CONTADO'
+                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                                : 'bg-amber-600 text-white border-amber-500 shadow-sm'
+                              : isDarkMode
+                              ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                              : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {condicionPago !== 'CONTADO' && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-amber-500 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" /> Venta a Crédito
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[11px] text-slate-400">Vencimiento:</label>
+                          <input
+                            type="date"
+                            value={fechaVencimiento}
+                            onChange={(e) => setFechaVencimiento(e.target.value)}
+                            className={`px-2 py-0.5 rounded-lg border text-xs font-mono font-bold text-amber-500 focus:outline-none ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Opción de Registrar Pago Inicial/Abono */}
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 border-t border-amber-500/20 text-xs text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={registrarPago}
+                          onChange={(e) => setRegistrarPago(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span className="font-medium">¿Registrar pago o abono inicial para esta venta? (Opcional)</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Campos de Pago (obligatorios en contado, opcionales en crédito) */}
+                  {registrarPago && (
+                    <div className="space-y-2.5 pt-1">
+                      {/* En caso de venta a crédito o abono, permitir especificar el monto del abono */}
+                      {condicionPago !== 'CONTADO' && (
+                        <div className="p-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
+                              Monto del Abono Inicial ({tiposPago.find((t) => t.id === selectedTipoPagoId)?.moneda || 'USD'})
+                            </label>
+                            <span className="text-[10px] text-slate-400">
+                              Total Venta: {tiposPago.find((t) => t.id === selectedTipoPagoId)?.moneda === 'VES' ? `${totalLocal.toFixed(2)} Bs.` : `$${totalUsd.toFixed(2)}`}
+                            </span>
+                          </div>
+                          <PosNumberInput
+                            value={montoAbono}
+                            onChange={(val) => setMontoAbono(String(val))}
+                            decimals={2}
+                            placeholder="0,00"
+                            className={`w-full px-3 py-1.5 rounded-xl border font-mono font-bold text-sm ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          />
+                          <p className="text-[10px] text-slate-400">
+                            Si se deja en 0,00 se asumirá el pago completo de la venta.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Método / Tipo de Pago
+                          </label>
+                          <select
+                            value={selectedTipoPagoId ?? ''}
+                            onChange={(e) => {
+                              const id = e.target.value ? Number(e.target.value) : null;
+                              setSelectedTipoPagoId(id);
+                              if (id) {
+                                const tp = tiposPago.find((t) => t.id === id);
+                                if (tp) {
+                                  const isEf = tp.codigo?.startsWith('EFECTIVO');
+                                  const comp = cuentasBancarias.find(
+                                    (cb) => (isEf ? cb.banco_tipo === 'CAJA' : cb.banco_tipo === 'BANCO') && cb.moneda === tp.moneda
+                                  );
+                                  setSelectedCuentaBancariaId(comp ? comp.id : null);
+                                }
+                              }
+                            }}
+                            className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          >
+                            {tiposPago.map((tp) => (
+                              <option key={tp.id} value={tp.id}>
+                                {tp.nombre} ({tp.moneda})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            {posIsEfectivo ? 'Caja de Efectivo Destino' : 'Cuenta Bancaria Destino'}
+                          </label>
+                          <select
+                            value={selectedCuentaBancariaId ?? ''}
+                            onChange={(e) => setSelectedCuentaBancariaId(e.target.value ? Number(e.target.value) : null)}
+                            className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          >
+                            {posCuentasCompatibles.length === 0 ? (
+                              <option value="">
+                                -- Sin {posIsEfectivo ? 'caja' : 'cuenta'} en {posTargetMoneda} --
+                              </option>
+                            ) : (
+                              posCuentasCompatibles.map((cb) => (
+                                <option key={cb.id} value={cb.id}>
+                                  [{cb.banco_tipo}] {cb.nombre} ({cb.moneda})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const currentTp = tiposPago.find((t) => t.id === selectedTipoPagoId);
+                        if (currentTp?.requiere_referencia || referenciaPago) {
+                          return (
+                            <div className="space-y-1">
+                              <label className="block text-[11px] font-semibold text-slate-500">
+                                Número / Referencia de Pago {currentTp?.requiere_referencia && <span className="text-rose-500">*</span>}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Ej: Últimos 4 dígitos o ref bancaria / ID Cashea"
+                                value={referenciaPago}
+                                onChange={(e) => setReferenciaPago(e.target.value)}
+                                className={`w-full px-3 py-1.5 rounded-xl border text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
+                                  isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 {checkoutError && (

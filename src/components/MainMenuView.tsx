@@ -22,25 +22,37 @@ import {
   SlidersHorizontal,
   BarChart3,
   Boxes,
+  UserCog,
+  Database,
+  ShieldAlert,
+  Server,
+  Wallet,
+  Building2,
 } from 'lucide-react';
-import { Tasa, DashboardData } from '@/types';
+import { Tasa, DashboardData, Usuario, ModuloPermiso } from '@/types';
 
 interface MainMenuViewProps {
   onNavigate: (tab: any, subTab?: 'ventas' | 'rentabilidad' | 'inventario') => void;
+  onOpenDbModal?: () => void;
+  onOpenMaintenanceModal?: () => void;
   currentRate: Tasa | null;
   dashboardData: DashboardData | null;
   productsCount: number;
   isDarkMode?: boolean;
+  currentUser?: Usuario | null;
 }
 
 export default function MainMenuView({
   onNavigate,
+  onOpenDbModal,
+  onOpenMaintenanceModal,
   currentRate,
   dashboardData,
   productsCount,
   isDarkMode = false,
+  currentUser,
 }: MainMenuViewProps) {
-  const [currentPage, setCurrentPage] = useState<0 | 1 | 2>(0);
+  const [currentPage, setCurrentPage] = useState<0 | 1 | 2 | 3>(0);
   const [viewMode, setViewMode] = useState<'slider' | 'grid'>('slider');
   
   // Touch swipe handling
@@ -60,10 +72,10 @@ export default function MainMenuView({
     const distance = touchStartX.current - touchEndX.current;
     if (distance > 50) {
       // Swiped left -> Next page
-      setCurrentPage((prev) => (prev < 2 ? ((prev + 1) as 0 | 1 | 2) : prev));
+      setCurrentPage((prev) => (prev < 3 ? ((prev + 1) as 0 | 1 | 2 | 3) : prev));
     } else if (distance < -50) {
       // Swiped right -> Previous page
-      setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2) : prev));
+      setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2 | 3) : prev));
     }
     touchStartX.current = null;
     touchEndX.current = null;
@@ -73,10 +85,10 @@ export default function MainMenuView({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') {
-        setCurrentPage((prev) => (prev < 2 ? ((prev + 1) as 0 | 1 | 2) : prev));
+        setCurrentPage((prev) => (prev < 3 ? ((prev + 1) as 0 | 1 | 2 | 3) : prev));
       }
       if (e.key === 'ArrowLeft') {
-        setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2) : prev));
+        setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2 | 3) : prev));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -132,24 +144,25 @@ export default function MainMenuView({
         : 'Ingreso a inventario',
     },
     {
-      id: 'orders',
+      id: 'pagos',
       num: '04',
-      title: 'Pedidos y Ventas',
-      subtitle: 'Historial completo de ventas, detalle de tickets y anulación con reversión de stock',
-      icon: Receipt,
-      gradient: 'from-emerald-500 via-teal-600 to-cyan-600',
-      badge: 'Con Anulación',
-      accentColor: 'text-emerald-500 dark:text-emerald-400',
-      glowColor: 'group-hover:shadow-emerald-500/25',
-      stat: 'Historial & Anulaciones',
+      title: 'Gestión de Pagos / Cobros',
+      subtitle: 'Cobros a clientes, abonos a créditos, pagos a proveedores y flujo de caja en bancos',
+      icon: Wallet,
+      gradient: 'from-teal-600 via-emerald-600 to-green-600',
+      badge: 'Tesorería',
+      accentColor: 'text-teal-500 dark:text-teal-400',
+      glowColor: 'group-hover:shadow-teal-500/25',
+      stat: 'Caja & Bancos',
     },
   ];
 
   // Group 2 (Second view - deslizar a la izquierda):
   // 5) Inventario / Productos
   // 6) Clientes / Proveedores
-  // 7) % Impuestos
-  // 8) Tasa de Cambio
+  // 7) Bancos / Cajas y Cuentas
+  // 8) % Impuestos
+  // 9) Tasa de Cambio
   const group2 = [
     {
       id: 'products',
@@ -176,8 +189,20 @@ export default function MainMenuView({
       stat: 'Gestión Comercial',
     },
     {
-      id: 'impuestos',
+      id: 'bancos',
       num: '07',
+      title: 'Bancos, Cajas y Cuentas',
+      subtitle: 'Creación de entidades bancarias, cajas físicas de efectivo y configuración de cuentas receptoras',
+      icon: Building2,
+      gradient: 'from-indigo-600 via-blue-600 to-cyan-600',
+      badge: 'Cuentas & Cajas',
+      accentColor: 'text-indigo-500 dark:text-indigo-400',
+      glowColor: 'group-hover:shadow-indigo-500/25',
+      stat: 'Entidades Financieras',
+    },
+    {
+      id: 'impuestos',
+      num: '08',
       title: '% Impuestos',
       subtitle: 'Configuración de alícuotas fiscales de IVA (16%, Exento 0% y reducidos)',
       icon: Percent,
@@ -189,7 +214,7 @@ export default function MainMenuView({
     },
     {
       id: 'rates',
-      num: '08',
+      num: '09',
       title: 'Tasa de Cambio (BCV)',
       subtitle: 'Monitoreo oficial de la tasa de cambio diaria y conversión automática en bolívares',
       icon: TrendingUp,
@@ -202,14 +227,27 @@ export default function MainMenuView({
   ];
 
   // Group 3 (Third view - Reportes, Rentabilidad e Inventario):
-  // 9) Reportes de Ventas por Fecha
-  // 10) Rentabilidad FIFO Venta vs Costo
-  // 11) Inventario & Valorización
+  // 10) Pedidos y Ventas (Historial & Anulaciones)
+  // 11) Reportes de Ventas por Fecha
+  // 12) Rentabilidad FIFO Venta vs Costo
+  // 13) Inventario & Valorización
   const group3 = [
+    {
+      id: 'orders',
+      num: '10',
+      title: 'Pedidos y Ventas',
+      subtitle: 'Historial completo de ventas, detalle de tickets y anulación con reversión de stock',
+      icon: Receipt,
+      gradient: 'from-emerald-500 via-teal-600 to-cyan-600',
+      badge: 'Historial & Anulación',
+      accentColor: 'text-emerald-500 dark:text-emerald-400',
+      glowColor: 'group-hover:shadow-emerald-500/25',
+      stat: 'Auditoría de Tickets',
+    },
     {
       id: 'reports',
       subTab: 'ventas',
-      num: '09',
+      num: '11',
       title: 'Ventas por Fecha',
       subtitle: 'Filtro por rangos (hoy, semana, mes, año), totales USD/Bs., desglose diario y exportación',
       icon: BarChart3,
@@ -222,7 +260,7 @@ export default function MainMenuView({
     {
       id: 'reports',
       subTab: 'rentabilidad',
-      num: '10',
+      num: '12',
       title: 'Rentabilidad FIFO',
       subtitle: 'Valuación PEPS por lote de compra, costo real, utilidad bruta y margen porcentual de ganancia',
       icon: TrendingUp,
@@ -235,7 +273,7 @@ export default function MainMenuView({
     {
       id: 'reports',
       subTab: 'inventario',
-      num: '11',
+      num: '13',
       title: 'Inventario & Valorización',
       subtitle: 'Existencias físicas desglosadas por presentación, capital al costo promedio, proyección a venta y alertas',
       icon: Boxes,
@@ -247,13 +285,99 @@ export default function MainMenuView({
     },
   ];
 
+  // Group 4 (Fourth view - Sistema, Usuarios y Base de Datos):
+  // 14) Usuarios y Permisos
+  // 15) Mantenimiento y Respaldos
+  // 16) Configuración de Base de Datos
+  const group4 = [
+    {
+      id: 'users',
+      num: '14',
+      title: 'Usuarios y Permisos',
+      subtitle: 'Administración de operadores, contraseñas, roles y niveles de acceso a componentes',
+      icon: UserCog,
+      gradient: 'from-violet-600 via-indigo-600 to-purple-700',
+      badge: 'Seguridad',
+      accentColor: 'text-violet-500 dark:text-violet-400',
+      glowColor: 'group-hover:shadow-violet-500/25',
+      stat: 'Control de Acceso',
+    },
+    {
+      id: 'maintenance',
+      num: '15',
+      title: 'Mantenimiento & Respaldos',
+      subtitle: 'Limpieza de transacciones de prueba, reinicio de secuencias y descarga de copias SQL',
+      icon: ShieldAlert,
+      gradient: 'from-rose-600 via-red-600 to-pink-700',
+      badge: 'Administración BD',
+      accentColor: 'text-rose-500 dark:text-rose-400',
+      glowColor: 'group-hover:shadow-rose-500/25',
+      stat: 'Herramientas de Mantenimiento',
+      customAction: () => {
+        if (onOpenMaintenanceModal) onOpenMaintenanceModal();
+      },
+    },
+    {
+      id: 'db_config',
+      num: '16',
+      title: 'Conexión a Base de Datos',
+      subtitle: 'Verificar parámetros de PostgreSQL (Host, Puerto, Usuario, Base de datos y SSL)',
+      icon: Database,
+      gradient: 'from-cyan-600 via-blue-600 to-indigo-700',
+      badge: 'PostgreSQL',
+      accentColor: 'text-cyan-500 dark:text-cyan-400',
+      glowColor: 'group-hover:shadow-cyan-500/25',
+      stat: 'Parámetros del Servidor',
+      customAction: () => {
+        if (onOpenDbModal) onOpenDbModal();
+      },
+    },
+  ];
+
+  const hasPermission = (id: string, subTab?: string): boolean => {
+    if (!currentUser || !currentUser.permisos) return true; // Si no hay usuario definido, permite
+    const perms = currentUser.permisos;
+    if (id === 'dashboard') return true;
+    if (id === 'pos') return perms.includes('pos');
+    if (id === 'orders') return perms.includes('orders');
+    if (id === 'compras') return perms.includes('compras');
+    if (id === 'products') return perms.includes('products');
+    if (id === 'terceros') return perms.includes('terceros');
+    if (id === 'bancos') return perms.includes('terceros') || perms.includes('compras') || perms.includes('users');
+    if (id === 'impuestos') return perms.includes('impuestos');
+    if (id === 'rates') return perms.includes('rates');
+    if (id === 'users') return perms.includes('users');
+    if (id === 'maintenance' || id === 'db_config') return perms.includes('maintenance') || perms.includes('users');
+    if (id === 'reports') {
+      if (subTab === 'rentabilidad') return perms.includes('reports_profit') || perms.includes('reports');
+      return perms.includes('reports');
+    }
+    return true;
+  };
+
   const renderCard = (item: any) => {
+    const isAllowed = hasPermission(item.id, item.subTab);
     const Icon = item.icon;
     return (
       <button
         key={`${item.id}-${item.num}`}
-        onClick={() => onNavigate(item.id, item.subTab)}
-        className={`group relative text-left p-6 sm:p-7 rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-lg hover:-translate-y-1.5 cursor-pointer ${item.glowColor} ${
+        onClick={() => {
+          if (!isAllowed) {
+            alert('No tienes permisos suficientes para acceder a este módulo.');
+            return;
+          }
+          if (item.customAction) {
+            item.customAction();
+          } else {
+            onNavigate(item.id, item.subTab);
+          }
+        }}
+        disabled={!isAllowed}
+        className={`group relative text-left p-6 sm:p-7 rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-lg ${
+          !isAllowed
+            ? 'opacity-40 grayscale cursor-not-allowed border-slate-300 dark:border-slate-800'
+            : `hover:-translate-y-1.5 cursor-pointer ${item.glowColor}`
+        } ${
           isDarkMode
             ? 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-850 shadow-black/40'
             : 'bg-white border-slate-200/90 hover:border-slate-300 hover:bg-white shadow-slate-200/50'
@@ -438,6 +562,23 @@ export default function MainMenuView({
             <span className="hidden sm:inline">Reportes & FIFO</span>
             <span className="sm:hidden">Reportes</span>
           </button>
+
+          <button
+            onClick={() => setCurrentPage(3)}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+              currentPage === 3
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                : isDarkMode
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-lg bg-white/20 flex items-center justify-center text-[10px] font-mono">
+              4
+            </span>
+            <span className="hidden sm:inline">Sistema</span>
+            <span className="sm:hidden">Sistema</span>
+          </button>
         </div>
 
         {/* View Mode Toggle & Arrows */}
@@ -445,7 +586,7 @@ export default function MainMenuView({
           {/* Arrow Controls for Sliding */}
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2) : prev))}
+              onClick={() => setCurrentPage((prev) => (prev > 0 ? ((prev - 1) as 0 | 1 | 2 | 3) : prev))}
               disabled={currentPage === 0}
               title="Página Anterior (Flecha Izquierda)"
               className={`p-2.5 rounded-xl border transition ${
@@ -460,8 +601,8 @@ export default function MainMenuView({
             </button>
 
             <button
-              onClick={() => setCurrentPage((prev) => (prev < 2 ? ((prev + 1) as 0 | 1 | 2) : prev))}
-              disabled={currentPage === 2}
+              onClick={() => setCurrentPage((prev) => (prev < 3 ? ((prev + 1) as 0 | 1 | 2 | 3) : prev))}
+              disabled={currentPage === 3}
               title="Deslizar a la izquierda para ver más opciones (Flecha Derecha)"
               className={`p-2.5 rounded-xl border transition ${
                 currentPage === 2
@@ -535,6 +676,13 @@ export default function MainMenuView({
                 {group3.map(renderCard)}
               </div>
             </div>
+
+            {/* Page 4 (Cards 12 to 14: Sistema y Configuración) */}
+            <div className="w-full shrink-0 pr-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {group4.map(renderCard)}
+              </div>
+            </div>
           </div>
 
           {/* Slide Progress Dots / Indicators */}
@@ -572,6 +720,17 @@ export default function MainMenuView({
               }`}
               title="Página 3: Reportes de Ventas, Rentabilidad FIFO e Inventario"
             />
+            <button
+              onClick={() => setCurrentPage(3)}
+              className={`h-2.5 rounded-full transition-all duration-300 ${
+                currentPage === 3
+                  ? 'w-8 bg-indigo-600'
+                  : isDarkMode
+                  ? 'w-2.5 bg-slate-800 hover:bg-slate-700'
+                  : 'w-2.5 bg-slate-300 hover:bg-slate-400'
+              }`}
+              title="Página 4: Sistema, Usuarios, Mantenimiento y Base de Datos"
+            />
           </div>
         </div>
       ) : (
@@ -601,6 +760,15 @@ export default function MainMenuView({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {group3.map(renderCard)}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Sistema, Usuarios y Administración de Base de Datos
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {group4.map(renderCard)}
             </div>
           </div>
         </div>

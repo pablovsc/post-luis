@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Tasa } from '@/types';
-import { TrendingUp, Calendar, CheckCircle2, History, AlertCircle, Loader2 } from 'lucide-react';
+import { TrendingUp, Calendar, CheckCircle2, History, AlertCircle, Loader2, RefreshCw, Globe } from 'lucide-react';
+import PosNumberInput from '@/components/PosNumberInput';
 
 interface RatesViewProps {
   currentRate: Tasa | null;
@@ -16,7 +17,38 @@ export default function RatesView({ currentRate, historyRates, onRefresh, isDark
   const [fecha, setFecha] = useState(todayStr);
   const [tasaValor, setTasaValor] = useState(currentRate ? String(currentRate.tasa) : '');
   const [loading, setLoading] = useState(false);
+  const [syncingBcv, setSyncingBcv] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSyncBcv = async () => {
+    setSyncingBcv(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/tasa/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({
+          type: 'success',
+          text: data.message || `Tasa oficial del BCV actualizada: ${data.tasa} Bs. / USD`,
+        });
+        setTasaValor(String(data.tasa));
+        if (data.fecha) setFecha(data.fecha);
+        onRefresh();
+      } else {
+        setMessage({
+          type: 'error',
+          text: data.message || 'No se pudo obtener la tasa desde el BCV. Verifica tu conexión a internet.',
+        });
+      }
+    } catch {
+      setMessage({
+        type: 'error',
+        text: 'Error al contactar con el servicio del BCV.',
+      });
+    } finally {
+      setSyncingBcv(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +102,27 @@ export default function RatesView({ currentRate, historyRates, onRefresh, isDark
             </p>
           </div>
         </div>
+
+        {/* Botón de Sincronización Automática con el BCV */}
+        <button
+          type="button"
+          onClick={handleSyncBcv}
+          disabled={syncingBcv}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition shadow-sm ${
+            syncingBcv
+              ? 'opacity-60 cursor-not-allowed'
+              : isDarkMode
+              ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-500/50'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 shadow-sm'
+          }`}
+        >
+          {syncingBcv ? (
+            <RefreshCw className="w-4 h-4 animate-spin text-emerald-500" />
+          ) : (
+            <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          )}
+          <span>{syncingBcv ? 'Consultando BCV...' : 'Actualizar del BCV'}</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -161,14 +214,10 @@ export default function RatesView({ currentRate, historyRates, onRefresh, isDark
                 }`}>
                   Valor de Tasa *
                 </label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  required
-                  placeholder="0.0000"
+                <PosNumberInput
                   value={tasaValor}
-                  onChange={(e) => setTasaValor(e.target.value)}
+                  onChange={(val) => setTasaValor(String(val))}
+                  decimals={4}
                   className={`w-full rounded-xl px-3.5 py-2.5 text-sm font-mono border focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
                     isDarkMode
                       ? 'bg-slate-800/80 border-slate-700 text-white'

@@ -66,6 +66,112 @@ export interface PedidoLinea {
   cantidad_base?: number | string;
 }
 
+export type CondicionPago =
+  | 'CONTADO'
+  | 'CREDITO'
+  | 'CREDITO_7'
+  | 'CREDITO_15'
+  | 'CREDITO_30'
+  | 'CREDITO_45';
+
+export interface TipoPago {
+  id: number;
+  codigo: string;
+  nombre: string;
+  moneda: 'USD' | 'VES';
+  requiere_referencia: boolean;
+  activo: boolean;
+  creado_en?: string;
+}
+
+export type TipoEntidadFinanciera = 'BANCO' | 'CAJA';
+
+export interface Banco {
+  id: number;
+  codigo?: string | null;
+  nombre: string;
+  tipo: TipoEntidadFinanciera;
+  activo: boolean;
+  creado_en?: string;
+}
+
+export type TipoCuentaBancaria = 'CORRIENTE' | 'AHORRO' | 'CAJA_EFECTIVO' | 'VIRTUAL';
+
+export interface CuentaBancaria {
+  id: number;
+  banco_id: number;
+  banco_nombre?: string;
+  banco_tipo?: TipoEntidadFinanciera;
+  nombre: string;
+  tipo_cuenta: TipoCuentaBancaria;
+  numero_cuenta?: string | null;
+  moneda: 'USD' | 'VES';
+  saldo_actual: number | string;
+  activo: boolean;
+  creado_en?: string;
+}
+
+export type TipoOperacionPago = 'COBRO_VENTA' | 'PAGO_COMPRA' | 'ABONO_VENTA' | 'ABONO_COMPRA';
+export type EstadoPago = 'APROBADO' | 'ANULADO';
+
+export interface PagoDocumento {
+  id?: number;
+  pago_id?: number;
+  tipo_documento: 'VENTA' | 'COMPRA';
+  pedido_id?: number | null;
+  compra_id?: number | null;
+  numero_factura?: string | null;
+  monto_imputado_original: number;
+  monto_imputado_usd: number;
+  creado_en?: string;
+}
+
+export interface DocumentoPendiente {
+  id: number;
+  tipo_documento: 'VENTA' | 'COMPRA';
+  numero_documento: string;
+  fecha: string;
+  tercero_id: number;
+  tercero_nombre: string;
+  condicion_pago: string;
+  total_usd: number;
+  total_local: number;
+  total_pagado_usd: number;
+  saldo_pendiente_usd: number;
+  saldo_pendiente_local: number;
+  estado_pago: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+}
+
+export interface Pago {
+  id: number;
+  tipo_operacion: TipoOperacionPago;
+  pedido_id?: number | null;
+  compra_id?: number | null;
+  tercero_id?: number | null;
+  tercero_nombre?: string | null;
+  tercero_identificacion?: string | null;
+  tipo_pago_id: number;
+  tipo_pago_nombre?: string;
+  cuenta_bancaria_id?: number | null;
+  cuenta_bancaria_nombre?: string | null;
+  banco_nombre?: string | null;
+  banco_tipo?: TipoEntidadFinanciera | null;
+  fecha_pago: string;
+  moneda: 'USD' | 'VES';
+  monto_original: number | string;
+  tasa_cambio: number | string;
+  monto_equivalente_usd: number | string;
+  referencia?: string | null;
+  nota?: string | null;
+  estado: EstadoPago;
+  creado_en?: string;
+  creado_por?: number | null;
+  creado_por_nombre?: string | null;
+  actualizado_en?: string | null;
+  actualizado_por?: number | null;
+  documentos?: PagoDocumento[];
+}
+
 export type EstadoPedido = 'COMPLETADO' | 'ANULADO';
 
 export interface Pedido {
@@ -79,6 +185,12 @@ export interface Pedido {
   monto_impuesto_usd: number | string;
   total_usd: number | string;
   total_moneda_local: number | string;
+  condicion_pago?: CondicionPago;
+  tipo_pago_id?: number | null;
+  tipo_pago_nombre?: string | null;
+  tipo_pago_moneda?: 'USD' | 'VES' | null;
+  referencia_pago?: string | null;
+  fecha_vencimiento?: string | null;
   total_articulos?: number;
   estado: EstadoPedido;
   lineas?: PedidoLinea[];
@@ -116,6 +228,12 @@ export interface Compra {
   monto_impuesto_usd: number | string;
   total_usd: number | string;
   total_moneda_local: number | string;
+  condicion_pago?: CondicionPago;
+  tipo_pago_id?: number | null;
+  tipo_pago_nombre?: string | null;
+  tipo_pago_moneda?: 'USD' | 'VES' | null;
+  referencia_pago?: string | null;
+  fecha_vencimiento?: string | null;
   observaciones?: string | null;
   estado: EstadoCompra;
   creado_en?: string;
@@ -174,3 +292,40 @@ export interface DashboardData {
     ingresos_usd: number;
   }[];
 }
+
+export type ModuloPermiso =
+  | 'pos'
+  | 'orders'
+  | 'compras'
+  | 'products'
+  | 'terceros'
+  | 'rates'
+  | 'impuestos'
+  | 'reports'
+  | 'reports_profit'
+  | 'users'
+  | 'maintenance';
+
+export interface Rol {
+  id: number;
+  nombre: string;
+  descripcion?: string | null;
+  permisos: ModuloPermiso[];
+  activo: boolean;
+  creado_en?: string;
+  total_usuarios?: number;
+}
+
+export interface Usuario {
+  id: number;
+  username: string;
+  nombre_completo: string;
+  email?: string | null;
+  rol_id: number;
+  rol_nombre?: string;
+  permisos?: ModuloPermiso[];
+  activo: boolean;
+  ultimo_acceso?: string | null;
+  creado_en?: string;
+}
+
