@@ -28,6 +28,8 @@ export async function GET() {
 
     // Orden de inserción recomendado para evitar conflictos de Foreign Keys
     const priorityOrder = [
+      'm_rol',
+      'm_usuario',
       'm_impuesto',
       'm_tercero',
       'm_producto',

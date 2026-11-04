@@ -8,11 +8,11 @@ console.log('========================================================');
 
 // Iniciar el scraper BCV en segundo plano
 try {
-  const bcv = spawn('node', ['scrape-bcv.js', '--daemon'], {
-    detached: true,
+  const bcvScript = path.join(__dirname, 'scrape-bcv.js');
+  const bcv = spawn(process.execPath, [bcvScript, '--daemon'], {
+    cwd: __dirname,
     stdio: 'ignore',
   });
-  bcv.unref();
   console.log('✓ Sincronizador de tasa BCV iniciado.');
 } catch (e) {
   console.warn('! No se pudo iniciar el scraper BCV:', e.message);

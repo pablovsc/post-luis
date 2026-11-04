@@ -30,12 +30,15 @@ import ComprasView from '@/components/ComprasView';
 import TercerosView from '@/components/TercerosView';
 import ImpuestosView from '@/components/ImpuestosView';
 import ReportesView from '@/components/ReportesView';
+import UsuariosView from '@/components/UsuariosView';
+import LoginModal from '@/components/LoginModal';
 import DatabaseModal from '@/components/DatabaseModal';
 import QrModal from '@/components/QrModal';
 import MantenimientoModal from '@/components/MantenimientoModal';
-import { Producto, Tasa, DashboardData } from '@/types';
+import { Producto, Tasa, DashboardData, Usuario, ModuloPermiso } from '@/types';
+import { UserCheck, LogOut, Shield } from 'lucide-react';
 
-type ActiveTab = 'menu' | 'dashboard' | 'pos' | 'orders' | 'compras' | 'products' | 'terceros' | 'impuestos' | 'rates' | 'reports';
+type ActiveTab = 'menu' | 'dashboard' | 'pos' | 'orders' | 'compras' | 'products' | 'terceros' | 'impuestos' | 'rates' | 'reports' | 'users';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('menu');
@@ -45,6 +48,10 @@ export default function Home() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [dbConnected, setDbConnected] = useState(true);
   
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<Usuario | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
   // Theme state: defaults to 'light'
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -55,7 +62,7 @@ export default function Home() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Load theme preference on mount (light by default)
+  // Load theme preference and user session on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
@@ -65,7 +72,31 @@ export default function Home() {
       setIsDarkMode(false);
       document.documentElement.classList.remove('dark');
     }
+
+    const savedUser = localStorage.getItem('pos_user');
+    if (savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+      } catch {
+        setShowLoginModal(true);
+      }
+    } else {
+      setShowLoginModal(true);
+    }
   }, []);
+
+  const handleLoginSuccess = (user: Usuario) => {
+    setCurrentUser(user);
+    localStorage.setItem('pos_user', JSON.stringify(user));
+    setShowLoginModal(false);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('pos_user');
+    setActiveTab('menu');
+    setShowLoginModal(true);
+  };
 
   const toggleTheme = () => {
     const nextDark = !isDarkMode;
@@ -123,6 +154,22 @@ export default function Home() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const hasPermission = (tab: ActiveTab): boolean => {
+    if (!currentUser || !currentUser.permisos) return true;
+    const perms = currentUser.permisos;
+    if (tab === 'menu' || tab === 'dashboard') return true;
+    if (tab === 'pos') return perms.includes('pos');
+    if (tab === 'orders') return perms.includes('orders');
+    if (tab === 'compras') return perms.includes('compras');
+    if (tab === 'products') return perms.includes('products');
+    if (tab === 'terceros') return perms.includes('terceros');
+    if (tab === 'impuestos') return perms.includes('impuestos');
+    if (tab === 'rates') return perms.includes('rates');
+    if (tab === 'reports') return perms.includes('reports');
+    if (tab === 'users') return perms.includes('users');
+    return true;
+  };
 
   const navItems = [
     { id: 'menu', label: 'Inicio', icon: LayoutGrid },
@@ -300,18 +347,66 @@ export default function Home() {
               </span>
             </button>
 
-            {/* Mantenimiento / Sistemas Button */}
-            <button
-              onClick={() => setShowMantenimientoModal(true)}
-              title="Herramienta de Mantenimiento de Base de Datos y Pruebas"
-              className={`p-2 rounded-xl border transition flex items-center justify-center ${
-                isDarkMode
-                  ? 'bg-rose-950/20 border-rose-900/40 text-rose-400 hover:bg-rose-900/40'
-                  : 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 shadow-sm'
-              }`}
-            >
-              <ShieldAlert className="w-4 h-4" />
-            </button>
+            {/* Mantenimiento / Sistemas Button (Solo si tiene permiso 'maintenance') */}
+            {(!currentUser || currentUser.permisos?.includes('maintenance')) && (
+              <button
+                onClick={() => setShowMantenimientoModal(true)}
+                title="Herramienta de Mantenimiento de Base de Datos y Pruebas"
+                className={`p-2 rounded-xl border transition flex items-center justify-center ${
+                  isDarkMode
+                    ? 'bg-rose-950/20 border-rose-900/40 text-rose-400 hover:bg-rose-900/40'
+                    : 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 shadow-sm'
+                }`}
+              >
+                <ShieldAlert className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Usuario Actual & Cerrar Sesión */}
+            {currentUser ? (
+              <div className="flex items-center gap-1 pl-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentUser.permisos?.includes('users')) {
+                      setActiveTab('users');
+                    }
+                  }}
+                  title={`Usuario: ${currentUser.nombre_completo} (${currentUser.rol_nombre})`}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                  }`}
+                >
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center text-[10px] font-bold">
+                    {currentUser.username.slice(0, 1).toUpperCase()}
+                  </div>
+                  <span className="hidden xl:inline max-w-[100px] truncate">{currentUser.nombre_completo.split(' ')[0]}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title="Cerrar Sesión"
+                  className={`p-2 rounded-xl border transition text-rose-500 hover:text-rose-600 ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-slate-800 hover:bg-rose-950/40'
+                      : 'bg-white border-slate-200 hover:bg-rose-50 shadow-sm'
+                  }`}
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-500 transition"
+              >
+                Iniciar Sesión
+              </button>
+            )}
           </div>
         </div>
 
@@ -366,10 +461,13 @@ export default function Home() {
               setActiveTab(tab);
               if (subTab) setReportSubTab(subTab);
             }}
+            onOpenDbModal={() => setShowDbModal(true)}
+            onOpenMaintenanceModal={() => setShowMantenimientoModal(true)}
             currentRate={currentRate}
             dashboardData={dashboardData}
             productsCount={products.length}
             isDarkMode={isDarkMode}
+            currentUser={currentUser}
           />
         )}
 
@@ -445,6 +543,13 @@ export default function Home() {
             isDarkMode={isDarkMode}
           />
         )}
+
+        {activeTab === 'users' && (
+          <UsuariosView
+            isDarkMode={isDarkMode}
+            currentUser={currentUser}
+          />
+        )}
       </main>
 
       {/* Footer */}
@@ -476,6 +581,13 @@ export default function Home() {
         isOpen={showMantenimientoModal}
         onClose={() => setShowMantenimientoModal(false)}
         onCompleted={fetchData}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Modal de Inicio de Sesión */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onLoginSuccess={handleLoginSuccess}
         isDarkMode={isDarkMode}
       />
     </div>

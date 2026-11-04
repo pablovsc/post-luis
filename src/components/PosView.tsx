@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Producto, Tasa, Tercero, Presentacion } from '@/types';
+import { Producto, Tasa, Tercero, Presentacion, TipoPago, CondicionPago, CuentaBancaria } from '@/types';
 import { getOpcionesUnidad, getOpcionUnidad, formatStockDesglose } from '@/lib/unidades';
 import {
   ShoppingCart,
@@ -73,7 +73,69 @@ export default function PosView({
     email: '',
   });
 
+  // Tipos y Términos de Pago
+  const [tiposPago, setTiposPago] = useState<TipoPago[]>([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancaria[]>([]);
+  const [selectedCuentaBancariaId, setSelectedCuentaBancariaId] = useState<number | null>(null);
+  const [condicionPago, setCondicionPago] = useState<CondicionPago>('CONTADO');
+  const [registrarPago, setRegistrarPago] = useState<boolean>(true);
+  const [selectedTipoPagoId, setSelectedTipoPagoId] = useState<number | null>(null);
+  const [referenciaPago, setReferenciaPago] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().split('T')[0];
+  });
+
   const rateValue = currentRate ? Number(currentRate.tasa) : 0;
+
+  // Cambiar condición de pago y auto-ajustar fecha de vencimiento según los días
+  const handleSelectCondicionPago = (cond: CondicionPago) => {
+    setCondicionPago(cond);
+    if (cond === 'CONTADO') {
+      setRegistrarPago(true);
+    } else {
+      // Si es crédito, por defecto no es obligatorio registrar el cobro en el acto
+      setRegistrarPago(false);
+      const d = new Date();
+      if (cond === 'CREDITO_7') d.setDate(d.getDate() + 7);
+      else if (cond === 'CREDITO_15') d.setDate(d.getDate() + 15);
+      else if (cond === 'CREDITO_30') d.setDate(d.getDate() + 30);
+      else if (cond === 'CREDITO_45') d.setDate(d.getDate() + 45);
+      else d.setDate(d.getDate() + 15); // CREDITO general
+      setFechaVencimiento(d.toISOString().split('T')[0]);
+    }
+  };
+
+  // Load payment methods and bank accounts / cash drawers
+  const loadTiposPagoYCuentas = async () => {
+    try {
+      const [tpRes, cbRes] = await Promise.all([
+        fetch('/api/tipos-pago'),
+        fetch('/api/cuentas-bancarias'),
+      ]);
+      const tpData = await tpRes.json();
+      const cbData = await cbRes.json();
+      if (tpData.success && Array.isArray(tpData.tiposPago)) {
+        setTiposPago(tpData.tiposPago);
+        if (tpData.tiposPago.length > 0 && !selectedTipoPagoId) {
+          setSelectedTipoPagoId(tpData.tiposPago[0].id);
+        }
+      }
+      if (cbData.success && Array.isArray(cbData.cuentas)) {
+        setCuentasBancarias(cbData.cuentas);
+        if (cbData.cuentas.length > 0 && !selectedCuentaBancariaId) {
+          setSelectedCuentaBancariaId(cbData.cuentas[0].id);
+        }
+      }
+    } catch (e) {
+      console.error('Error cargando tipos de pago o cuentas bancarias:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadTiposPagoYCuentas();
+  }, []);
 
   // Load clients
   const loadClients = async () => {
@@ -336,6 +398,12 @@ export default function PosView({
           cliente_nombre: selectedClient?.razon_social_nombre || 'Cliente Genérico',
           tasa_cambio_aplicada: rateValue,
           permitir_stock_negativo: permitirStockNegativo,
+          condicion_pago: condicionPago,
+          tipo_pago_id: registrarPago ? selectedTipoPagoId : null,
+          referencia_pago: registrarPago && referenciaPago.trim() ? referenciaPago.trim() : undefined,
+          fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : undefined,
+          cuenta_bancaria_id: registrarPago ? selectedCuentaBancariaId : null,
+          registrar_pago: registrarPago,
           items: itemsPayload,
         }),
       });
@@ -345,6 +413,10 @@ export default function PosView({
       if (data.success) {
         setLastCompletedOrder({
           ...data.order,
+          condicion_pago: condicionPago,
+          tipo_pago_nombre: registrarPago ? (tiposPago.find(t => t.id === selectedTipoPagoId)?.nombre || null) : 'Crédito Pendiente',
+          referencia_pago: registrarPago && referenciaPago.trim() ? referenciaPago.trim() : null,
+          fecha_vencimiento: condicionPago !== 'CONTADO' ? fechaVencimiento : null,
           cliente_nombre: selectedClient?.razon_social_nombre || 'Cliente Genérico',
           cliente_identificacion: selectedClient?.identificacion || 'V-00000000',
           lineas: cart.map((c) => {
@@ -1124,6 +1196,34 @@ export default function PosView({
                       Bs.
                     </span>
                   </div>
+
+                  {/* Detalle de Pago */}
+                  <div className={`border-t pt-2 space-y-1 text-[11px] ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Término de Venta:</span>
+                      <span className={`font-bold ${lastCompletedOrder.condicion_pago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                        {lastCompletedOrder.condicion_pago || 'CONTADO'}
+                      </span>
+                    </div>
+                    {lastCompletedOrder.tipo_pago_nombre && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Forma de Cobro:</span>
+                        <span className="font-medium">{lastCompletedOrder.tipo_pago_nombre}</span>
+                      </div>
+                    )}
+                    {lastCompletedOrder.referencia_pago && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Referencia:</span>
+                        <span className="font-mono">{lastCompletedOrder.referencia_pago}</span>
+                      </div>
+                    )}
+                    {lastCompletedOrder.condicion_pago !== 'CONTADO' && lastCompletedOrder.fecha_vencimiento && (
+                      <div className="flex justify-between text-amber-500">
+                        <span>Fecha Vencimiento:</span>
+                        <span className="font-mono font-semibold">{lastCompletedOrder.fecha_vencimiento}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <button
@@ -1242,6 +1342,142 @@ export default function PosView({
                       Bs.
                     </span>
                   </div>
+                </div>
+
+                {/* Selección de Término y Tipo de Pago */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Término de Venta
+                    </label>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                      {[
+                        { id: 'CONTADO', label: 'Contado' },
+                        { id: 'CREDITO_7', label: '7 Días' },
+                        { id: 'CREDITO_15', label: '15 Días' },
+                        { id: 'CREDITO_30', label: '30 Días' },
+                        { id: 'CREDITO_45', label: '45 Días' },
+                        { id: 'CREDITO', label: 'Crédito' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleSelectCondicionPago(item.id as CondicionPago)}
+                          className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center border cursor-pointer ${
+                            condicionPago === item.id
+                              ? item.id === 'CONTADO'
+                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                                : 'bg-amber-600 text-white border-amber-500 shadow-sm'
+                              : isDarkMode
+                              ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                              : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {condicionPago !== 'CONTADO' && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-amber-500 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" /> Venta a Crédito
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[11px] text-slate-400">Vencimiento:</label>
+                          <input
+                            type="date"
+                            value={fechaVencimiento}
+                            onChange={(e) => setFechaVencimiento(e.target.value)}
+                            className={`px-2 py-0.5 rounded-lg border text-xs font-mono font-bold text-amber-500 focus:outline-none ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Opción de Registrar Pago Inicial/Abono */}
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 border-t border-amber-500/20 text-xs text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={registrarPago}
+                          onChange={(e) => setRegistrarPago(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span className="font-medium">¿Registrar pago o abono inicial para esta venta? (Opcional)</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Campos de Pago (obligatorios en contado, opcionales en crédito) */}
+                  {registrarPago && (
+                    <div className="space-y-2.5 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Método / Tipo de Pago
+                          </label>
+                          <select
+                            value={selectedTipoPagoId ?? ''}
+                            onChange={(e) => setSelectedTipoPagoId(e.target.value ? Number(e.target.value) : null)}
+                            className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          >
+                            {tiposPago.map((tp) => (
+                              <option key={tp.id} value={tp.id}>
+                                {tp.nombre} ({tp.moneda})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Destino (Caja / Cuenta Receptora)
+                          </label>
+                          <select
+                            value={selectedCuentaBancariaId ?? ''}
+                            onChange={(e) => setSelectedCuentaBancariaId(e.target.value ? Number(e.target.value) : null)}
+                            className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer ${
+                              isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          >
+                            {cuentasBancarias.map((cb) => (
+                              <option key={cb.id} value={cb.id}>
+                                [{cb.banco_tipo}] {cb.nombre} ({cb.moneda})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const currentTp = tiposPago.find((t) => t.id === selectedTipoPagoId);
+                        if (currentTp?.requiere_referencia || referenciaPago) {
+                          return (
+                            <div className="space-y-1">
+                              <label className="block text-[11px] font-semibold text-slate-500">
+                                Número / Referencia de Pago {currentTp?.requiere_referencia && <span className="text-rose-500">*</span>}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Ej: Últimos 4 dígitos o ref bancaria / ID Cashea"
+                                value={referenciaPago}
+                                onChange={(e) => setReferenciaPago(e.target.value)}
+                                className={`w-full px-3 py-1.5 rounded-xl border text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
+                                  isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 {checkoutError && (

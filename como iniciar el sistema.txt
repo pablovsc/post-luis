@@ -27,7 +27,9 @@ Al no usar Docker para la aplicación:
 Si instalas PostgreSQL directo en Windows:
 Solo necesitas instalar PostgreSQL (versión 14, 15 o 16 desde postgresql.org
 ).
-Creas la base de datos luis y ejecutas el script init.sql.
+Creas la base de datos luis y ejecutas los scripts de la carpeta sql en orden:
+1. sql/01_tablas.sql (Crea todas las tablas e índices)
+2. sql/02_datos_iniciales.sql (Carga usuarios, roles, tipos de pago, bancos, cuentas y productos iniciales)
 Los parámetros por defecto que busca el sistema son:
 Host: localhost
 Puerto: 5432

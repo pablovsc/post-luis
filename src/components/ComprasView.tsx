@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Compra, Producto, Tercero, Impuesto, Tasa, EstadoCompra } from '@/types';
+import { Compra, Producto, Tercero, Impuesto, Tasa, EstadoCompra, TipoPago, CondicionPago } from '@/types';
 import { getOpcionesUnidad, formatStockDesglose } from '@/lib/unidades';
 import {
   FileText,
@@ -232,6 +232,17 @@ export default function ComprasView({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Tipos y Términos de Pago en Compras
+  const [tiposPago, setTiposPago] = useState<TipoPago[]>([]);
+  const [condicionPago, setCondicionPago] = useState<CondicionPago>('CONTADO');
+  const [tipoPagoId, setTipoPagoId] = useState<number | ''>('');
+  const [referenciaPago, setReferenciaPago] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
+
   // Quick Product Search Bar State
   const [quickSearchProd, setQuickSearchProd] = useState('');
   const [showQuickResults, setShowQuickResults] = useState(false);
@@ -297,16 +308,24 @@ export default function ComprasView({
 
   const fetchSuppliersAndTaxes = async () => {
     try {
-      const [supRes, taxRes] = await Promise.all([
+      const [supRes, taxRes, tpRes] = await Promise.all([
         fetch('/api/terceros?tipo=PROVEEDOR&active=true'),
         fetch('/api/impuestos?active=true'),
+        fetch('/api/tipos-pago'),
       ]);
       const supData = await supRes.json();
       const taxData = await taxRes.json();
+      const tpData = await tpRes.json();
       if (supData.success) setSuppliers(supData.terceros || []);
       if (taxData.success) setTaxes(taxData.taxes || []);
+      if (tpData.success && Array.isArray(tpData.tiposPago)) {
+        setTiposPago(tpData.tiposPago);
+        if (tpData.tiposPago.length > 0 && !tipoPagoId) {
+          setTipoPagoId(tpData.tiposPago[0].id);
+        }
+      }
     } catch (e) {
-      console.error('Error fetching suppliers/taxes:', e);
+      console.error('Error fetching suppliers/taxes/tiposPago:', e);
     }
   };
 
@@ -328,6 +347,12 @@ export default function ComprasView({
     setTasaCambio(currentRate ? Number(currentRate.tasa) : 36.5);
     setObservaciones('');
     setEstadoDoc('COMPLETADO');
+    setCondicionPago('CONTADO');
+    setTipoPagoId(tiposPago.length > 0 ? tiposPago[0].id : '');
+    setReferenciaPago('');
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    setFechaVencimiento(d.toISOString().split('T')[0]);
     setErrorMsg('');
     setSuccessMsg('');
     // No agregar ningún producto por defecto; el usuario debe elegirlo
@@ -450,6 +475,10 @@ export default function ComprasView({
           tasa_cambio_aplicada: tasaCambio,
           observaciones: observaciones.trim() || undefined,
           estado: statusChoice,
+          condicion_pago: condicionPago,
+          tipo_pago_id: tipoPagoId ? Number(tipoPagoId) : undefined,
+          referencia_pago: referenciaPago.trim() || undefined,
+          fecha_vencimiento: condicionPago === 'CREDITO' ? fechaVencimiento : undefined,
           items: lines,
         }),
       });
@@ -703,6 +732,7 @@ export default function ComprasView({
                 <th className="py-3.5 px-6">ID</th>
                 <th className="py-3.5 px-6">Factura Prov.</th>
                 <th className="py-3.5 px-6">Proveedor</th>
+                <th className="py-3.5 px-6">Condición</th>
                 <th className="py-3.5 px-6">Fecha Emisión</th>
                 <th className="py-3.5 px-6 text-center">Estado</th>
                 <th className="py-3.5 px-6 text-center">Items</th>
@@ -716,14 +746,14 @@ export default function ComprasView({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12">
+                  <td colSpan={12} className="text-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-emerald-500 mb-2" />
                     <span className="text-xs text-slate-400">Cargando facturas de compra...</span>
                   </td>
                 </tr>
               ) : filteredCompras.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-slate-400">
+                  <td colSpan={12} className="text-center py-12 text-slate-400">
                     No se han encontrado facturas de compra con los filtros seleccionados.
                   </td>
                 </tr>
@@ -742,6 +772,22 @@ export default function ComprasView({
                         <span className="font-mono text-[11px] text-slate-400">
                           {c.proveedor_identificacion}
                         </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${
+                          c.condicion_pago !== 'CONTADO'
+                            ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                            : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        }`}>
+                          {c.condicion_pago || 'CONTADO'}
+                        </span>
+                        {c.tipo_pago_nombre && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {c.tipo_pago_nombre}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-xs text-slate-500">
@@ -938,6 +984,99 @@ export default function ComprasView({
                       isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
                     }`}
                   />
+                </div>
+              </div>
+
+              {/* Fila: Términos y Métodos de Pago */}
+              <div className={`p-4 rounded-xl border space-y-3 ${isDarkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Condición y Forma de Pago
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
+                      Término de Pago
+                    </label>
+                    <select
+                      value={condicionPago}
+                      onChange={(e) => {
+                        const val = e.target.value as CondicionPago;
+                        setCondicionPago(val);
+                        const d = new Date();
+                        if (val === 'CREDITO_7') d.setDate(d.getDate() + 7);
+                        else if (val === 'CREDITO_15') d.setDate(d.getDate() + 15);
+                        else if (val === 'CREDITO_30') d.setDate(d.getDate() + 30);
+                        else if (val === 'CREDITO_45') d.setDate(d.getDate() + 45);
+                        else d.setDate(d.getDate() + 30);
+                        setFechaVencimiento(d.toISOString().split('T')[0]);
+                      }}
+                      className={`w-full px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer ${
+                        condicionPago !== 'CONTADO' ? 'text-amber-500' : 'text-emerald-500'
+                      } ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'}`}
+                    >
+                      <option value="CONTADO">CONTADO</option>
+                      <option value="CREDITO_7">CRÉDITO 7 DÍAS</option>
+                      <option value="CREDITO_15">CRÉDITO 15 DÍAS</option>
+                      <option value="CREDITO_30">CRÉDITO 30 DÍAS</option>
+                      <option value="CREDITO_45">CRÉDITO 45 DÍAS</option>
+                      <option value="CREDITO">CRÉDITO ABIERTO</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
+                      Método de Pago
+                    </label>
+                    <select
+                      value={tipoPagoId}
+                      onChange={(e) => setTipoPagoId(e.target.value ? Number(e.target.value) : '')}
+                      className={`w-full px-3 py-2 rounded-xl border text-xs cursor-pointer ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value="">-- Sin especificar --</option>
+                      {tiposPago.map((tp) => (
+                        <option key={tp.id} value={tp.id}>
+                          {tp.nombre} ({tp.moneda})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">
+                      Referencia de Pago (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Ref Bancaria o Comprobante"
+                      value={referenciaPago}
+                      onChange={(e) => setReferenciaPago(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl border text-xs font-mono ${
+                        isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  {condicionPago !== 'CONTADO' ? (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1 text-amber-500">
+                        Vencimiento Crédito *
+                      </label>
+                      <input
+                        type="date"
+                        value={fechaVencimiento}
+                        onChange={(e) => setFechaVencimiento(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-xl border text-xs font-mono text-amber-500 ${
+                          isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-300'
+                        }`}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-xs text-slate-400 italic py-2">
+                      Pago al contado inmediato
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1436,6 +1575,19 @@ export default function ComprasView({
                 <div>
                   <span className="text-slate-400">Fecha de Emisión:</span>
                   <p className="font-semibold">{selectedCompra.fecha_emision}</p>
+                </div>
+                <div>
+                  <span className="text-slate-400">Condición & Pago:</span>
+                  <p className="font-semibold text-emerald-500">
+                    {selectedCompra.condicion_pago || 'CONTADO'}
+                    {selectedCompra.tipo_pago_nombre ? ` (${selectedCompra.tipo_pago_nombre})` : ''}
+                  </p>
+                  {selectedCompra.referencia_pago && (
+                    <p className="font-mono text-[11px] text-slate-400">Ref: {selectedCompra.referencia_pago}</p>
+                  )}
+                  {selectedCompra.condicion_pago !== 'CONTADO' && selectedCompra.fecha_vencimiento && (
+                    <p className="font-mono text-[11px] text-amber-500">Vence: {selectedCompra.fecha_vencimiento}</p>
+                  )}
                 </div>
                 <div>
                   <span className="text-slate-400">Estado Actual:</span>
